@@ -1,0 +1,32 @@
+# Segredos
+.env
+.env.*
+!.env.example
+
+# Dados brutos e processados (nunca versionar)
+data/raw/*
+!data/raw/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
+
+# Cache de chamadas ao LLM e logs de uso (decisão de versionamento pendente; ver docs/decisoes.md)
+cache/
+logs/
+
+# Ambiente Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+
+# Notebooks
+.ipynb_checkpoints/
+
+# SO / editores
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
