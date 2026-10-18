@@ -63,6 +63,7 @@ pytest                 # testes rápidos, sem LLM
 
 ollama pull qwen3:4b   # ~2,5 GB
 pytest -m ollama       # teste real com o modelo local (um item)
+python -m src.llm.bench  # segundos por chamada, com e sem raciocínio
 ```
 
 O `.env` é opcional (veja `.env.example`): só é preciso para sobrescrever configurações ou usar
@@ -75,6 +76,14 @@ e coloque os CSVs em `data/raw/`. Os dados não são versionados.
 python -m src.data.make_db           # data/processed/radar.db (determinístico, ~20 s)
 python -m src.data.stats             # reports/fase1_dados.md + figuras
 python -m src.data.sample_taxonomy   # IDs da amostra usada para validar a taxonomia
+```
+
+Gold set (rotulagem manual, sem LLM):
+
+```bash
+python -m src.labeling.gold          # sorteia amostra e divisão dev/test (uma vez só)
+streamlit run src/labeling/app.py    # ferramenta de rotulagem (http://127.0.0.1:8501)
+python -m src.labeling.report        # reports/gold_set.md: distribuição dos rótulos
 ```
 
 ### Modo reprodutível (sem rodar o modelo)
@@ -102,7 +111,9 @@ data/samples/        IDs de amostras auxiliares (sem texto)
 docs/                taxonomia, decisões, análise de erros
 prompts/             prompts versionados
 reports/             relatórios de avaliação
-src/data/            carga, limpeza, sinal de atraso, banco SQLite, estatísticas
+src/data/            carga, limpeza, sinal de atraso (inclusive point-in-time), banco, estatísticas
+src/labeling/        amostra do gold set, ferramenta de rotulagem, relatório
+src/taxonomy.py      classes e mapeamento causa -> área
 src/llm/             cliente de LLM (Ollama/Anthropic), cache em disco, uso
 tests/               pytest
 ```

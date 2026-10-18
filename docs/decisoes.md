@@ -181,6 +181,7 @@ Números citados abaixo vêm de `reports/fase1_dados.md` (`python -m src.data.st
   atrasados: 2,26, contra 4,28 no prazo. Pedidos sem entrega têm nota 1,76.
 - Inconsistências mantidas e contadas, não corrigidas: 23 pedidos com coleta pela
   transportadora depois da entrega ao cliente (não usamos essa data).
+- **Revisado em D-025**, com a versão point-in-time para o backtest.
 - **Limitação para o backtest:** o atraso só é observável depois da data estimada, ou na
   entrega, se for antes. A Fase 7 deve usar "atrasado e já conhecido na semana t". As datas
   necessárias estão no banco.
@@ -194,7 +195,10 @@ Números citados abaixo vêm de `reports/fase1_dados.md` (`python -m src.data.st
   com a mensagem.
 - Mojibake: 8 mensagens com padrões de codificação quebrada. Não tratadas.
 
-### D-019 · Semana e disponibilidade da avaliação: **divergência com o plano, decisão pendente**
+### D-019 · Semana e disponibilidade da avaliação: divergência com o plano
+> **Decidido pelo usuário (2026-10-18):** no backtest, a avaliação fica disponível em
+> `review_answer_ts` (`answered_week`).
+
 - O plano diz para usar a data de criação da avaliação no backtest. Nos dados,
   `review_creation_date` é a **data de envio da pesquisa** (88,8% exatamente 1 dia após a
   entrega), e o texto só existe na **resposta** (`review_answer_ts`). A resposta chega com
@@ -203,7 +207,7 @@ Números citados abaixo vêm de `reports/fase1_dados.md` (`python -m src.data.st
   vazamento pequeno na mediana, mas real na cauda. **Proposta:** a disponibilidade de uma
   avaliação no backtest é `review_answer_ts` (`answered_week`). O banco guarda as duas
   semanas (`created_week`, `answered_week`) para que a escolha seja só de configuração.
-  **Aguarda aprovação do usuário** antes da Fase 7.
+  Aprovado (ver nota acima).
 - Semana = segunda-feira (`YYYY-MM-DD`).
 
 ### D-020 · Seleção e censura no fim do dataset
@@ -220,7 +224,12 @@ Números citados abaixo vêm de `reports/fase1_dados.md` (`python -m src.data.st
   evento futuro (ter recebido a pesquisa). O backtest herda essa seleção; vai para as
   Limitações do README.
 
-### D-021 · Volume por segmento: vendedor semanal é esparso demais (**ponto para a Fase 7**)
+### D-021 · Volume por segmento: vendedor semanal é esparso demais
+> **Decidido pelo usuário (2026-10-18):** a detecção da Fase 7 usa só **estado e categoria**,
+> com o limiar de volume de D-026. Vendedor deixa de ser segmento de detecção e passa a ser
+> dimensão de aprofundamento do agente investigador (Fase 8). A proposta abaixo, de janela
+> de 4 semanas para vendedor, fica descartada.
+
 - Na janela de análise, entre os segmentos com volume médio semanal de comentários ≥ 5:
   13 de 27 estados (93,9% dos comentários), 21 de 74 categorias (88,5%) e só 11 de 3.067
   vendedores (15,8%).
@@ -255,3 +264,206 @@ Números citados abaixo vêm de `reports/fase1_dados.md` (`python -m src.data.st
   - `data/samples/amostra_taxonomia.csv`, só IDs e notas;
   - os exemplos citados em `docs/taxonomia.md`, trechos curtos que o plano exige (o dataset é
     CC BY-NC-SA 4.0).
+
+## Fase 1.1 — Correções aprovadas pelo usuário antes da Fase 2
+
+### D-024 · Ollama em funcionamento: medições e duas correções
+- Ambiente: Ollama 0.40.6 e `qwen3:4b` (Q4_K_M, 2,5 GB). `pytest -m ollama`: 2 de 2
+  passaram (classificação estruturada e chamada de ferramenta).
+- Benchmark `python -m src.llm.bench`: 5 textos sintéticos, modelo já carregado na GPU.
+
+  | | Sem raciocínio (`think=false`) | Com raciocínio (`think=true`) |
+  |---|---|---|
+  | s/chamada, mediana | 0,47 (mín 0,41, máx 0,57) | 18,51 (mín 11,49, máx 30,29) |
+  | Tokens de saída, mediana | 23 | 1.040 |
+  | JSON válido | 5 de 5 | 5 de 5 |
+
+  A 1ª chamada inclui carregar o modelo (`load_s` ≈ 2,2 s).
+- **Correção 1: `localhost` → `127.0.0.1`.** No Windows, `localhost` tenta IPv6 (`::1`)
+  primeiro, e cada requisição perdia 2,05 s (medido: 2,052 s contra 0,001 s com
+  `127.0.0.1`). Sem a correção, a chamada sem raciocínio levava 2,6 s, quase 6 vezes mais.
+- **Correção 2: raciocínio vazando para o texto.** Com ferramentas e `think=false`, o qwen3
+  escreveu o raciocínio no `content`, terminando em `</think>`. O provedor agora move esse
+  trecho para um bloco `thinking`; um teste unitário e o teste real verificam. Na
+  classificação, sem ferramentas, isso não ocorreu.
+- **Ordem de grandeza** (não é a estimativa formal; o prompt real da Fase 3 será maior):
+  - 41.281 comentários × 0,47 s ≈ 5,4 h sem raciocínio;
+  - × 18,5 s ≈ 212 h com raciocínio;
+  - o dev set com raciocínio leva ≈ 31 min.
+
+  O modo com raciocínio só é viável no dev set, o que reforça a estratégia híbrida (D-015).
+
+### D-025 · Sinal de atraso point-in-time para o backtest (revisa D-017)
+- **Regra (definida pelo usuário):** na semana *t*, um pedido está atrasado se a data
+  estimada já passou e ele não tinha sido entregue até *t*, ou se foi entregue com atraso
+  até *t*. A data de entrega só é usada se for anterior ao instante de avaliação.
+  `order_status` nunca é usado, porque não sabemos quando o status mudou.
+- **Implementação** em `src/data/point_in_time.py`:
+  - `delay_status_as_of(orders, as_of)`: devolve um de 5 estados;
+  - `weekly_due_late_rate`: coorte com data estimada de *t* a *t* + 6, avaliada em *t* + 7
+    dias, opcionalmente por segmento.
+
+  São 13 testes, incluindo a propriedade de que trocar entregas posteriores a `as_of` não
+  muda o resultado em `as_of`.
+- **Auditoria da Fase 1.** `orders.is_late`, que usa a data final de entrega, apareceu em
+  dois tipos de uso:
+  - nas seções 6, 9.2–9.4 e 10, que são descrições retrospectivas e foram mantidas, agora
+    marcadas como tal;
+  - na série semanal (gráfico e tabela 9.1), que foi trocada pela versão point-in-time.
+- **Diferença entre as séries.** Para a coorte da semana estimada, o atraso já está decidido
+  em *t* + 7. As duas séries só diferem no denominador: na point-in-time, pedidos nunca
+  entregues contam como atrasados. Diferença média de +3,19 p.p. por semana, máxima de
+  +10,71 p.p., correlação de 0,948 (`reports/fase1_dados.md`, seção 11).
+- **A conclusão "mesma semana" se mantém e fica mais forte.** Nos 3 eventos, a menor nota
+  média e a maior fração de notas ≤ 2 caem na mesma semana do pico de atraso point-in-time
+  (dez/2017) ou uma semana antes (mar–abr/2018 e mai–jun/2018). A correlação mais negativa
+  entre atraso em *t* e nota em *t* + *k* está em *k* = −1 (−0,765), praticamente igual a
+  *k* = 0 (−0,757). No agregado nacional, a nota não atrasa em relação ao sinal objetivo.
+  Hipótese não verificada: avaliações de pedidos atrasados de coortes anteriores chegam
+  enquanto a coorte da semana ainda está vencendo.
+- **Ponto em aberto, decisão do usuário:**
+  - Os pedidos nunca entregues incluem 686 sem itens registrados (artefato do dataset, quase
+    todos `unavailable`) e cancelados.
+  - Eles são 3% a 7% da coorte em 2017 e 1,4% a 2,8% em 2018, o que eleva o nível da série
+    em 2017.
+  - **Proposta:** excluir do sinal os pedidos sem itens. Como os itens são registrados na
+    compra, isso não gera vazamento.
+  - Não foi aplicado sem aprovação.
+
+### D-026 · Definição de incidente e linhas de base, fixadas antes da Fase 7
+Escrita antes de existir qualquer detector. Qualquer mudança posterior exige nova entrada
+com o motivo e os resultados antes e depois da mudança.
+
+**Segmentos monitorados (D-021):**
+- Estado do cliente e categoria, com volume médio ≥ 5 comentários por semana na janela de
+  2017-02-06 a 2018-08-27. São 13 estados e 21 categorias (`reports/fase1_dados.md`,
+  seção 8).
+- Usar o volume da janela inteira é uma escolha retrospectiva. Ela afeta quais segmentos são
+  monitorados, não quando eles alertam.
+
+**Períodos:**
+- Semanas de 2017-02-06 a 2018-08-13, fim da série de atraso sem censura (D-020).
+- Calibração: 2017-02-06 a 2017-10-30. Avaliação: 2017-11-06 a 2018-08-13.
+- Os limiares de todos os métodos são escolhidos só na calibração.
+
+**Gabarito × detectores.** Os rótulos de incidente são gabarito: podem usar o histórico
+inteiro, porque nenhum detector os vê. Detectores e linhas de base usam só dados
+point-in-time (D-019, D-025).
+
+**Semana anômala** (regra comum), para uma série de proporção *p* com *n* observações na
+semana *t* do segmento *s*:
+- referência *b* = mediana de *p* nas 26 semanas anteriores a *t*, com no mínimo 8 semanas
+  com dados;
+- a semana é anômala se *n* ≥ *n_min*, *p* > max(2·*b*, *b* + 5 p.p.) e o limite inferior do
+  intervalo de Wilson de 95% de *p* > *b*.
+
+**Incidente:** sequência de ≥ 2 semanas anômalas consecutivas, do mesmo segmento e tipo.
+Sequências separadas por uma única semana normal são unidas. O início é a primeira semana; o
+fim, a última.
+
+| Tipo | *p* | *n* | *n_min* |
+|---|---|---|---|
+| A — atraso | taxa de atraso point-in-time da coorte com data estimada na semana (D-025) | pedidos da coorte | 30 |
+| B — insatisfação não ligada a atraso | fração de notas ≤ 2 entre as avaliações respondidas na semana de pedidos entregues no prazo (`is_late = 0`; retrospectivo, permitido no gabarito) | essas avaliações | 20 |
+
+**Métodos comparados.** Todos usam a mesma regra de alerta e são calibrados para o mesmo
+orçamento de falsos alarmes:
+- **Radar:** proporção de cada causa classificada, por segmento e semana.
+- **B1, sinal ingênuo do plano:** queda da nota média do segmento (avaliações respondidas na
+  semana).
+- **B2, alternativa mais simples:** fração de avaliações com nota ≤ 2, ou seja, a contagem de
+  reclamações normalizada pelo volume.
+- **B3, referência:** taxa de atraso point-in-time.
+  - No tipo A, é circular (é ela que define o incidente), então não compete em antecedência.
+  - No tipo B, mostra o que um monitor de logística não vê.
+
+**Orçamento de falsos alarmes:**
+- Na calibração, cada método usa o limiar mais sensível que mantém no máximo 1 falso alarme
+  por semana, somando todos os segmentos monitorados.
+- Também é reportada a curva recall × falsos alarmes por semana para vários limiares, para
+  que a conclusão não dependa de um único ponto.
+
+**Métricas** (período de avaliação):
+- **Casamento:** um alerta do método *m* no segmento *s* na semana *w* casa com o incidente
+  *i* de *s* se *w* ∈ [início − 4, fim]. A semana de detecção *d_m(i)* é a do primeiro alerta
+  que casa.
+- **Recall por tipo:** incidentes detectados / incidentes.
+- **Antecedência do Radar sobre B1:** *d_B1(i)* − *d_Radar(i)*, em semanas, onde positivo
+  significa que o Radar detectou antes. Só vale quando os dois detectam; os incidentes que só
+  um método detecta são contados à parte, sem imputar valor. Também é reportado início −
+  *d_m(i)*.
+- **Falsos alarmes por semana:** alertas que não casam com nenhum incidente do mesmo
+  segmento (de qualquer tipo) em [início − 4, fim + 2], divididos pelas semanas de avaliação.
+
+**Se a antecedência for pequena.** Antecedência pequena é definida como mediana de Radar −
+B1 ≤ 1 semana nos incidentes do tipo A. É o esperado pela seção 11 da Fase 1. Nesse caso, o
+projeto avalia e reporta como valor principal:
+1. **Diagnóstico:** nos incidentes detectados, a causa dominante no alerta do Radar bate com
+   o tipo? No tipo A, `atraso_entrega` ou `nao_recebido`; no tipo B, as demais causas. B1 e
+   B2 não informam causa.
+2. **Problemas que não são de atraso:** recall do Radar nos incidentes do tipo B, contra B1,
+   B2 e B3. Por construção, B3 não vê esses incidentes.
+3. **Caso `5dceca12`:** vendedor de SP em abr/2018, com 50% de notas ≤ 2 e atraso de 15,6%,
+   próximo dos 13% nacionais.
+   - Como vendedor não é segmento de detecção, o caso é examinado na Fase 7 pela categoria do
+     vendedor: há alerta? há incidente do tipo B?
+   - Na Fase 8, é examinado como aprofundamento do agente a partir do alerta da categoria.
+   - Se não houver alerta na categoria, isso é reportado como limitação de cobertura.
+
+### D-027 · Área responsável: mapeamento fixo causa → área
+A área não é rotulada nem prevista; é derivada da causa (`src/taxonomy.py`, `AREA_BY_CAUSE`).
+
+| Causa | Área |
+|---|---|
+| `atraso_entrega`, `nao_recebido` | `logistica` |
+| `produto_defeituoso_ou_danificado`, `produto_diferente_do_anunciado`, `pedido_incompleto_ou_errado` | `vendedor` |
+| `problema_atendimento_ou_comunicacao` | `atendimento` |
+| `elogio` | `nenhuma` |
+| `outro`, `ambiguo` | `indefinida` |
+
+**Limitações conhecidas:**
+- Avaria no transporte cai em `produto_defeituoso_ou_danificado`, que leva a `vendedor`,
+  embora a responsabilidade seja da logística.
+- Cancelamento ou falta de estoque cai em `nao_recebido`, que leva a `logistica`, embora a
+  responsabilidade seja do vendedor.
+
+## Fase 2 — Ferramenta de rotulagem e gold set
+
+### D-028 · Gold set: amostra, divisão e rotulagem
+**Amostra e divisão:**
+- 250 avaliações com comentário, 50 por nota, semente 42. Os 100 IDs da amostra da
+  taxonomia foram excluídos (sobreposição verificada: 0).
+- O universo é o de todas as avaliações com comentário, não só a janela de análise.
+- Divisão estratificada de 20 dev e 30 test por nota (100 dev, 150 test), sorteada e gravada
+  em `data/gold/gold_sample.csv` antes da rotulagem. O script se recusa a sobrescrever o
+  arquivo.
+- A ordem de apresentação mistura dev e test, para que quem rotula não saiba o split.
+
+**Campos que o usuário rotula:**
+- causa principal: uma das 8 classes ou "ambíguo / não sei";
+- causa secundária (opcional);
+- `menciona_atraso`;
+- `pede_reembolso_troca`;
+- nota livre, com até 200 caracteres.
+
+`gravidade` não é rotulada, e a área vem de D-027.
+
+**A ferramenta:**
+- Mostra a nota, o título e a mensagem, mas não os dados do pedido nem o sinal de atraso.
+- Não chama nenhum LLM, porque pré-rotular é proibido.
+- `.streamlit/config.toml` restringe o servidor a `127.0.0.1`, para que os textos não fiquem
+  expostos na rede local.
+
+**Uso nas métricas:**
+- As métricas são reponderadas pela distribuição real das notas entre os comentários. O peso
+  de cada nota é a participação dela no universo dividida por 0,2 (`src/labeling/report.py`).
+- **Proposta:** itens "ambíguo" ficam fora das métricas principais e são reportados à parte.
+  O usuário pode mudar isso.
+
+**Versionamento:** `data/gold/` é versionado, com IDs e rótulos e sem textos.
+
+### D-029 · A nota é entrada do classificador
+- **Decidido pelo usuário:** a nota é mostrada a quem rotula e também é entrada do
+  classificador.
+- **Risco a medir na Fase 3:** o modelo pode usar a nota como atalho (por exemplo, nota 5 →
+  `elogio`), errando casos como o extravio com nota 5 visto na amostra da taxonomia.
