@@ -26,10 +26,15 @@ LATE_STATUSES = (DELIVERED_LATE, OPEN_LATE)
 
 
 def load_orders(con: sqlite3.Connection) -> pd.DataFrame:
-    """Colunas necessárias do banco, com datas convertidas."""
+    """Pedidos que entram no sinal, com datas convertidas.
+
+    Exclui pedidos sem itens registrados (775 no banco, 686 na janela de análise; D-030): são
+    um artefato do dataset, quase todos `unavailable`, que nunca podem ser entregues. Os itens
+    são registrados na compra, então o filtro não usa informação futura.
+    """
     df = pd.read_sql(
         "SELECT order_id, customer_state, purchase_ts, delivered_customer_ts, "
-        "estimated_delivery_date FROM orders",
+        "estimated_delivery_date FROM orders WHERE n_items > 0",
         con,
     )
     for col in ("purchase_ts", "delivered_customer_ts", "estimated_delivery_date"):

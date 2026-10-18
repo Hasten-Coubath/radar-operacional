@@ -27,6 +27,17 @@ def score_weights(sample: pd.DataFrame, population_share: pd.Series) -> pd.Serie
     return (population_share / sample_share).rename("peso")
 
 
+def ambiguity_line(df: pd.DataFrame) -> str:
+    """Contagem e taxa de ambiguidade no total e por split."""
+    amb = df["causa"] == AMBIGUOUS
+    parts = [f"{int(amb.sum())} de {len(df)} ({pct(amb.mean())})"]
+    for split in ("dev", "test"):
+        m = df["split"] == split
+        if m.any():
+            parts.append(f"{split} {int(amb[m].sum())}/{int(m.sum())} ({pct(amb[m].mean())})")
+    return "; ".join(parts)
+
+
 def class_table(df: pd.DataFrame, weights: pd.Series) -> pd.DataFrame:
     """Contagem por classe e split, mais a proporção reponderada (todos os itens não ambíguos)."""
     order = [*CAUSES, AMBIGUOUS]
@@ -93,7 +104,8 @@ def main() -> None:
         "_Gerado por `python -m src.labeling.report`. Não edite à mão._",
         "",
         f"- Rotulados: **{len(df)} de {len(sample)}** (faltam {missing}).",
-        f"- Ambíguos / não sei: {int((df['causa'] == AMBIGUOUS).sum())}.",
+        f"- Ambíguos / não sei: {ambiguity_line(df)}. Ficam fora das métricas principais e "
+        "são reportados à parte (D-028).",
         f"- Classes com poucos exemplos (< {FEW_DEV} no dev ou < {FEW_TEST} no test): "
         f"{', '.join(f'`{c}`' for c in few) or 'nenhuma'}.",
         "",

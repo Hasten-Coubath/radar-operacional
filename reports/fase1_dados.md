@@ -184,19 +184,24 @@ Para cada tipo de segmento: quantos segmentos têm volume médio semanal ≥ k n
 
 Exploração descritiva para escolher estudos de caso; **não** é a definição de incidente do backtest (Fase 7). Taxa de atraso por semana da data estimada de entrega (o atraso só é observável depois dela), até a semana 2018-08-13 (seção 6.1).
 
-### 9.1 Semanas com taxa nacional de atraso ≥ 2× a mediana (7.6%)
+### 9.1 Semanas com taxa nacional de atraso ≥ 2× a mediana (6.6%)
 
-Atraso **point-in-time** (seção 11): coorte com data estimada na semana, conhecida ao fim dela; pedidos nunca entregues contam como atrasados. Semanas com ≥ 200 pedidos vencidos; nota média e fração de notas ≤ 2 das avaliações respondidas na mesma semana. As seções 9.2 a 9.4 usam `orders.is_late` (data final de entrega): são descrições retrospectivas, não sinais do backtest.
+Atraso **point-in-time** (seção 11): coorte com data estimada na semana, conhecida ao fim dela; pedidos nunca entregues contam como atrasados e pedidos sem itens registrados ficam fora (D-030). Semanas com ≥ 200 pedidos vencidos; nota média e fração de notas ≤ 2 das avaliações respondidas na mesma semana. As seções 9.2 a 9.4 usam `orders.is_late` (data final de entrega): são descrições retrospectivas, não sinais do backtest.
 
 | semana | pedidos_vencidos | frac_atraso | nota_média | frac_neg |
 |---|---|---|---|---|
-| 2017-12-11 | 1836 | 16.3% | 4.01 | 16.7% |
-| 2017-12-18 | 2224 | 20.4% | 3.69 | 24.5% |
-| 2018-03-12 | 2260 | 16.9% | 3.71 | 24.1% |
-| 2018-03-19 | 2134 | 25.7% | 3.55 | 27.0% |
-| 2018-03-26 | 1491 | 26.4% | 3.67 | 25.5% |
-| 2018-04-02 | 1713 | 23.1% | 3.72 | 24.0% |
-| 2018-04-09 | 1789 | 18.0% | 3.83 | 20.8% |
+| 2017-05-08 | 641 | 14.7% | 4.03 | 15.7% |
+| 2017-12-11 | 1818 | 15.5% | 4.01 | 16.7% |
+| 2017-12-18 | 2201 | 19.5% | 3.69 | 24.5% |
+| 2017-12-25 | 1463 | 13.5% | 3.85 | 20.8% |
+| 2018-01-01 | 1246 | 14.0% | 3.82 | 21.5% |
+| 2018-03-12 | 2245 | 16.4% | 3.71 | 24.1% |
+| 2018-03-19 | 2125 | 25.4% | 3.55 | 27.0% |
+| 2018-03-26 | 1487 | 26.2% | 3.67 | 25.5% |
+| 2018-04-02 | 1709 | 22.9% | 3.72 | 24.0% |
+| 2018-04-09 | 1783 | 17.7% | 3.83 | 20.8% |
+| 2018-04-16 | 1590 | 14.7% | 3.89 | 20.0% |
+| 2018-06-04 | 1839 | 14.8% | 4.01 | 15.8% |
 
 ### 9.2 Taxa de atraso (%) por estado do cliente e mês da data estimada
 
@@ -260,10 +265,10 @@ Busca por expressões regulares no texto (não é classificação nem rótulo), 
 
 **Auditoria.** `orders.is_late` usa a data final de entrega. Foi usado nas seções 6 (nota por situação de entrega), 9.2–9.4 (estado e vendedor por mês) e 10 (desfecho dos textos “não recebi”), que são descrições retrospectivas. A série semanal da Fase 1 (gráfico e tabela 9.1) também usava `is_late`, indexada pela semana estimada; agora usa a versão point-in-time.
 
-**Versão point-in-time** (`src/data/point_in_time.py`): para a semana t, coorte com data estimada de t a t + 6, avaliada em t + 7 dias, usando só entregas anteriores a esse instante. Para essa coorte o atraso já está decidido em t + 7 (o dia estimado passou), então a diferença para a série pela data final está no denominador: pedidos nunca entregues contam como atrasados em vez de ficarem de fora.
+**Versão point-in-time** (`src/data/point_in_time.py`): para a semana t, coorte com data estimada de t a t + 6, avaliada em t + 7 dias, usando só entregas anteriores a esse instante. Para essa coorte o atraso já está decidido em t + 7 (o dia estimado passou), então a diferença para a série pela data final está no denominador: pedidos nunca entregues contam como atrasados em vez de ficarem de fora. Pedidos sem itens registrados (artefato do dataset) são excluídos do sinal (D-030).
 
-- Diferença point-in-time − data final, por semana: média +3.19 p.p., máxima +10.71 p.p.; correlação entre as séries: 0.948.
-- Atrasados ainda em aberto ao fim da semana estimada: 7305 de 9113 (80.2%).
+- Diferença point-in-time − data final, por semana: média +2.38 p.p., máxima +10.71 p.p.; correlação entre as séries: 0.967.
+- Atrasados ainda em aberto ao fim da semana estimada: 6619 de 8427 (78.5%).
 - Defasagem com a correlação mais negativa entre atraso e nota média: k = -1 (point-in-time) e k = 0 (data final).
 
 Picos dentro de cada evento (semana, segunda-feira):
@@ -278,12 +283,12 @@ Correlação entre o atraso da semana t e as avaliações respondidas em t + k:
 
 | atraso | k (semanas) | corr(atraso_t, nota média_t+k) | corr(atraso_t, frac. nota ≤ 2_t+k) |
 |---|---|---|---|
-| point-in-time | -2 | -0.574 | 0.560 |
-| point-in-time | -1 | -0.765 | 0.767 |
-| point-in-time | 0 | -0.757 | 0.762 |
-| point-in-time | 1 | -0.666 | 0.679 |
-| point-in-time | 2 | -0.473 | 0.476 |
-| point-in-time | 3 | -0.350 | 0.344 |
+| point-in-time | -2 | -0.595 | 0.589 |
+| point-in-time | -1 | -0.772 | 0.784 |
+| point-in-time | 0 | -0.744 | 0.756 |
+| point-in-time | 1 | -0.645 | 0.664 |
+| point-in-time | 2 | -0.452 | 0.459 |
+| point-in-time | 3 | -0.331 | 0.328 |
 | data final | -2 | -0.590 | 0.597 |
 | data final | -1 | -0.759 | 0.779 |
 | data final | 0 | -0.789 | 0.810 |

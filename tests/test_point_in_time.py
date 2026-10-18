@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import sqlite3
+from pathlib import Path
+
 import pandas as pd
 import pytest
 
@@ -102,3 +105,16 @@ def test_weekly_rate_by_group() -> None:
     out = weekly_due_late_rate(df, ["2018-03-05"], group_col="customer_state")
     rates = dict(zip(out["customer_state"], out["late_rate"], strict=True))
     assert rates == {"RJ": 0.0, "SP": 0.5}
+
+
+def test_load_orders_excludes_orders_without_items(tmp_path: Path) -> None:
+    from src.data.build import build_tables
+    from src.data.database import write_database
+    from src.data.point_in_time import load_orders
+    from tests.test_data import make_raw
+
+    db = tmp_path / "radar.db"
+    write_database(build_tables(make_raw()), db)  # o3 não tem itens
+    df = load_orders(sqlite3.connect(db))
+    assert sorted(df["order_id"]) == ["o1", "o2"]
+    assert pd.api.types.is_datetime64_any_dtype(df["estimated_delivery_date"])

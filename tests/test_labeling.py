@@ -181,3 +181,12 @@ def test_report_reweights_by_population_score_share() -> None:
     assert t.loc["atraso_entrega", "% reponderado"] == "33.3%"
     assert t.loc["elogio", "% reponderado"] == "66.7%"
     assert t.loc["atraso_entrega", "área (D-027)"] == "logistica"
+
+
+def test_report_ambiguity_rate_overall_and_by_split() -> None:
+    from src.labeling.report import ambiguity_line
+
+    df = pd.DataFrame(
+        {"split": ["dev", "dev", "test", "test"], "causa": [AMBIGUOUS, "elogio", "elogio", "outro"]}
+    )
+    assert ambiguity_line(df) == "1 de 4 (25.0%); dev 1/2 (50.0%); test 0/2 (0.0%)"

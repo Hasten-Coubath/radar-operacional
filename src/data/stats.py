@@ -430,7 +430,8 @@ def main() -> None:
         f"### 9.1 Semanas com taxa nacional de atraso ≥ 2× a mediana ({pct(base)})",
         "",
         "Atraso **point-in-time** (seção 11): coorte com data estimada na semana, conhecida "
-        "ao fim dela; pedidos nunca entregues contam como atrasados. Semanas com ≥ 200 "
+        "ao fim dela; pedidos nunca entregues contam como atrasados e pedidos sem itens "
+        "registrados ficam fora (D-030). Semanas com ≥ 200 "
         "pedidos vencidos; nota média e fração de notas ≤ 2 das avaliações respondidas na "
         "mesma semana. As seções 9.2 a 9.4 usam `orders.is_late` (data final de entrega): "
         "são descrições retrospectivas, não sinais do backtest.",
@@ -619,7 +620,8 @@ def _pit_section(
         "estimada de t a t + 6, avaliada em t + 7 dias, usando só entregas anteriores a esse "
         "instante. Para essa coorte o atraso já está decidido em t + 7 (o dia estimado passou), "
         "então a diferença para a série pela data final está no denominador: pedidos nunca "
-        "entregues contam como atrasados em vez de ficarem de fora.",
+        "entregues contam como atrasados em vez de ficarem de fora. Pedidos sem itens "
+        "registrados (artefato do dataset) são excluídos do sinal (D-030).",
         "",
         f"- Diferença point-in-time − data final, por semana: média {diff_pp.mean():+.2f} p.p., "
         f"máxima {diff_pp.max():+.2f} p.p.; correlação entre as séries: {corr_ff:.3f}.",

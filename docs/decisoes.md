@@ -312,23 +312,26 @@ Números citados abaixo vêm de `reports/fase1_dados.md` (`python -m src.data.st
   - na série semanal (gráfico e tabela 9.1), que foi trocada pela versão point-in-time.
 - **Diferença entre as séries.** Para a coorte da semana estimada, o atraso já está decidido
   em *t* + 7. As duas séries só diferem no denominador: na point-in-time, pedidos nunca
-  entregues contam como atrasados. Diferença média de +3,19 p.p. por semana, máxima de
-  +10,71 p.p., correlação de 0,948 (`reports/fase1_dados.md`, seção 11).
+  entregues contam como atrasados.
+  - Já com a exclusão de D-030: diferença média de +2,38 p.p. por semana, máxima de
+    +10,71 p.p., correlação de 0,967 (`reports/fase1_dados.md`, seção 11).
+  - Antes da exclusão: +3,19 p.p. de média e correlação de 0,948.
 - **A conclusão "mesma semana" se mantém e fica mais forte.** Nos 3 eventos, a menor nota
   média e a maior fração de notas ≤ 2 caem na mesma semana do pico de atraso point-in-time
   (dez/2017) ou uma semana antes (mar–abr/2018 e mai–jun/2018). A correlação mais negativa
-  entre atraso em *t* e nota em *t* + *k* está em *k* = −1 (−0,765), praticamente igual a
-  *k* = 0 (−0,757). No agregado nacional, a nota não atrasa em relação ao sinal objetivo.
+  entre atraso em *t* e nota em *t* + *k* está em *k* = −1 (−0,772), próxima de *k* = 0
+  (−0,744); antes de D-030, eram −0,765 e −0,757. No agregado nacional, a nota não atrasa
+  em relação ao sinal objetivo.
   Hipótese não verificada: avaliações de pedidos atrasados de coortes anteriores chegam
   enquanto a coorte da semana ainda está vencendo.
-- **Ponto em aberto, decisão do usuário:**
+- **Ponto que estava em aberto, resolvido em D-030:**
   - Os pedidos nunca entregues incluem 686 sem itens registrados (artefato do dataset, quase
     todos `unavailable`) e cancelados.
   - Eles são 3% a 7% da coorte em 2017 e 1,4% a 2,8% em 2018, o que eleva o nível da série
     em 2017.
   - **Proposta:** excluir do sinal os pedidos sem itens. Como os itens são registrados na
     compra, isso não gera vazamento.
-  - Não foi aplicado sem aprovação.
+  - Aprovado e aplicado (D-030).
 
 ### D-026 · Definição de incidente e linhas de base, fixadas antes da Fase 7
 Escrita antes de existir qualquer detector. Qualquer mudança posterior exige nova entrada
@@ -341,29 +344,72 @@ com o motivo e os resultados antes e depois da mudança.
 - Usar o volume da janela inteira é uma escolha retrospectiva. Ela afeta quais segmentos são
   monitorados, não quando eles alertam.
 
-**Períodos:**
-- Semanas de 2017-02-06 a 2018-08-13, fim da série de atraso sem censura (D-020).
-- Calibração: 2017-02-06 a 2017-10-30. Avaliação: 2017-11-06 a 2018-08-13.
-- Os limiares de todos os métodos são escolhidos só na calibração.
+**Congelamento.** Versão final registrada em 2026-10-18, antes de existir qualquer detector.
+Os parâmetros abaixo são fixos: não são ajustados em nenhum período, nem de calibração, nem
+de avaliação. Uma versão anterior desta entrada usava outro corte de períodos (calibração até
+2017-10-30); foi trocada antes de qualquer detector existir, pelo motivo explicado em
+"Períodos".
+
+**Períodos** (fixos; não serão alterados depois de ver resultados):
+
+| Período | Semanas (segunda-feira) | Uso |
+|---|---|---|
+| Calibração | 2017-02-06 a 2017-12-25 (47 semanas) | ajustar limiares e hiperparâmetros do detector e das linhas de base |
+| Avaliação | 2018-01-01 a 2018-08-13 (33 semanas) | medir recall, antecedência e falsos alarmes; nada é ajustado aqui |
+
+- **Por que o corte por ano:** a versão anterior (calibração até 2017-10-30) foi escolhida
+  sabendo onde caíam os eventos vistos na Fase 1. O corte por ano não depende dessa
+  informação. Consequência aceita: o evento de dez/2017 fica na calibração.
+- **O fim** em 2018-08-13 é o da série de atraso sem censura (D-020).
+- **Incidente que cruza o corte** pertence ao período da sua semana de início. Incidentes
+  iniciados na calibração ficam fora das métricas de avaliação. As semanas deles que caem em
+  2018 também não contam para falsos alarmes: alertas ali não são falsos nem acertos.
+- **Histórico:** detectores e linhas de base podem usar semanas de calibração como histórico
+  ao rodar na avaliação, sempre point-in-time.
+- **O que é escolhido só na calibração:** limiares, comprimento de janela, método estatístico
+  e quais causas compõem cada sinal. O conjunto de avaliação é usado uma única vez, ao final
+  da Fase 7.
 
 **Gabarito × detectores.** Os rótulos de incidente são gabarito: podem usar o histórico
 inteiro, porque nenhum detector os vê. Detectores e linhas de base usam só dados
-point-in-time (D-019, D-025).
+point-in-time (D-019, D-025, D-030).
 
-**Semana anômala** (regra comum), para uma série de proporção *p* com *n* observações na
-semana *t* do segmento *s*:
-- referência *b* = mediana de *p* nas 26 semanas anteriores a *t*, com no mínimo 8 semanas
-  com dados;
-- a semana é anômala se *n* ≥ *n_min*, *p* > max(2·*b*, *b* + 5 p.p.) e o limite inferior do
-  intervalo de Wilson de 95% de *p* > *b*.
+**"Acima do normal": definição numérica.** Para uma série de proporção *p* com *n*
+observações na semana *t* do segmento *s*:
+
+1. **Referência:** *b* = mediana de *p* nas semanas *u* ∈ [*t* − 26, *t* − 1] com *n* ≥
+   *n_min*.
+   - Exige no mínimo 8 dessas semanas; sem elas, a semana *t* não pode ser anômala.
+   - Como só olha para trás, a referência também é point-in-time.
+2. **Anômala:** a semana é anômala se valem as três condições:
+   - *n* ≥ *n_min*;
+   - *p* > max(2·*b*, *b* + 0,05);
+   - *L* > *b*, em que *L* é o limite inferior do intervalo de Wilson de 95% para *p*:
+
+     *L* = (*p* + *z*²/2*n* − *z*·√(*p*(1 − *p*)/*n* + *z*²/4*n*²)) / (1 + *z*²/*n*),
+     com *z* = 1,96.
+3. **Volume baixo:** semanas com *n* < *n_min* não são anômalas e contam como semanas normais
+   para a regra de junção.
+
+Limiar de *p* conforme a referência (antes do teste de Wilson):
+
+| *b* | 0% | 3% | 5% | 10% | 20% |
+|---|---|---|---|---|---|
+| limiar | 5% | 8% | 10% | 20% | 40% |
+
+Por que esses parâmetros (escolhidos a priori, não ajustados):
+- **2× com piso de 5 p.p.:** exige um efeito relativo e um efeito absoluto mínimos.
+- **Wilson:** evita disparos por volume baixo.
+- **Mediana de 26 semanas:** cobre meio ano de "normal" e resiste a incidentes de até cerca
+  de 12 semanas.
 
 **Incidente:** sequência de ≥ 2 semanas anômalas consecutivas, do mesmo segmento e tipo.
-Sequências separadas por uma única semana normal são unidas. O início é a primeira semana; o
-fim, a última.
+Sequências separadas por uma única semana não anômala são unidas. O início é a primeira
+semana anômala; o fim, a última.
 
 | Tipo | *p* | *n* | *n_min* |
 |---|---|---|---|
-| A — atraso | taxa de atraso point-in-time da coorte com data estimada na semana (D-025) | pedidos da coorte | 30 |
+| A — atraso | taxa de atraso point-in-time da coorte com data estimada na semana (D-025, D-030) | pedidos da coorte | 30 |
 | B — insatisfação não ligada a atraso | fração de notas ≤ 2 entre as avaliações respondidas na semana de pedidos entregues no prazo (`is_late = 0`; retrospectivo, permitido no gabarito) | essas avaliações | 20 |
 
 **Métodos comparados.** Todos usam a mesma regra de alerta e são calibrados para o mesmo
@@ -378,12 +424,13 @@ orçamento de falsos alarmes:
   - No tipo B, mostra o que um monitor de logística não vê.
 
 **Orçamento de falsos alarmes:**
-- Na calibração, cada método usa o limiar mais sensível que mantém no máximo 1 falso alarme
-  por semana, somando todos os segmentos monitorados.
+- Na calibração (2017), cada método usa o limiar mais sensível que mantém no máximo 1
+  falso alarme por semana, somando todos os segmentos monitorados. Esse limiar é levado sem
+  mudança para a avaliação (2018).
 - Também é reportada a curva recall × falsos alarmes por semana para vários limiares, para
   que a conclusão não dependa de um único ponto.
 
-**Métricas** (período de avaliação):
+**Métricas** (só no período de avaliação, 2018):
 - **Casamento:** um alerta do método *m* no segmento *s* na semana *w* casa com o incidente
   *i* de *s* se *w* ∈ [início − 4, fim]. A semana de detecção *d_m(i)* é a do primeiro alerta
   que casa.
@@ -457,8 +504,7 @@ A área não é rotulada nem prevista; é derivada da causa (`src/taxonomy.py`, 
 **Uso nas métricas:**
 - As métricas são reponderadas pela distribuição real das notas entre os comentários. O peso
   de cada nota é a participação dela no universo dividida por 0,2 (`src/labeling/report.py`).
-- **Proposta:** itens "ambíguo" ficam fora das métricas principais e são reportados à parte.
-  O usuário pode mudar isso.
+- Itens "ambíguo" ficam fora das métricas principais e são reportados à parte (D-031).
 
 **Versionamento:** `data/gold/` é versionado, com IDs e rótulos e sem textos.
 
@@ -467,3 +513,33 @@ A área não é rotulada nem prevista; é derivada da causa (`src/taxonomy.py`, 
   classificador.
 - **Risco a medir na Fase 3:** o modelo pode usar a nota como atalho (por exemplo, nota 5 →
   `elogio`), errando casos como o extravio com nota 5 visto na amostra da taxonomia.
+
+### D-030 · Pedidos sem itens ficam fora do sinal de atraso
+- **Decidido pelo usuário (2026-10-18).** O sinal point-in-time (`load_orders` em
+  `src/data/point_in_time.py`) exclui os pedidos com `n_items = 0`. São 775 no banco e 686 na
+  janela de análise: 599 `unavailable`, 82 `canceled` e 5 `created`.
+- **Motivo:** são um artefato do dataset (o pedido não tem item registrado) e nunca podem ser
+  entregues; sem a exclusão, inflavam a série de 2017. Os itens são registrados na compra,
+  então o filtro não usa informação futura. Há teste para isso.
+- **Efeito:** ver os números de D-025.
+- **O que não muda:** as tabelas retrospectivas (`orders.is_late`) e o banco não são
+  afetados; os pedidos continuam lá.
+
+### D-031 · Itens "ambíguo" no gold set
+- **Decidido pelo usuário (2026-10-18).** Itens rotulados "ambíguo / não sei" ficam fora das
+  métricas principais do classificador (Fases 3 a 5) e são reportados à parte.
+- **O que é reportado:**
+  - a taxa de ambiguidade, no total e por split (`src/labeling/report.py`);
+  - na avaliação, o que cada classificador previu nesses itens.
+
+### D-032 · Nota para a Fase 6: avaliar classificar tudo com o LLM
+- Com 0,47 s por chamada sem raciocínio (D-024), classificar os 41.281 comentários com o LLM
+  ficaria na ordem de horas, não de dias.
+- **Na Fase 6, avaliar essa opção contra a híbrida de D-015.** Requisitos:
+  - execução retomável, com o cache em disco como ponto de retomada: cada item já
+    classificado é um acerto de cache;
+  - estimativa de tempo com os segundos por chamada medidos no dev com o prompt real, mais o
+    pior caso de 2 tentativas por item;
+  - OK do usuário antes de rodar (regra das 50 chamadas).
+- A escolha leva em conta a qualidade medida na Fase 5. Se o LLM não for melhor que o
+  baseline no test set, rodá-lo em tudo não se justifica.
