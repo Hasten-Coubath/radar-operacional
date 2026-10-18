@@ -7,6 +7,9 @@ requires-python = ">=3.11"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+# testes que chamam o Ollama local ficam fora da execução padrão: `pytest -m ollama`
+addopts = '-m "not ollama"'
+markers = ["ollama: chama o servidor Ollama local de verdade (lento, requer GPU/modelo)"]
 
 [tool.ruff]
 line-length = 100

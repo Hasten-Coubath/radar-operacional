@@ -80,13 +80,15 @@ def test_cache_hit_avoids_second_call(tmp_path: Path) -> None:
     assert second.cache_key == first.cache_key
 
 
-def test_cache_key_depends_on_model_prompt_and_input() -> None:
+def test_cache_key_depends_on_model_prompt_input_and_params() -> None:
     base = req().cache_key("fake")
     assert req().cache_key("fake") == base
     assert req(model="outro").cache_key("fake") != base
     assert req(system="p2").cache_key("fake") != base
     assert req(text="outra entrada").cache_key("fake") != base
     assert req().cache_key("outro-provedor") != base
+    assert req().model_copy(update={"think": True}).cache_key("fake") != base
+    assert req().model_copy(update={"options": {"num_ctx": 4096}}).cache_key("fake") != base
 
 
 def test_cache_key_ignores_dict_key_order() -> None:
@@ -150,6 +152,19 @@ def test_cost_and_usage_log(tmp_path: Path) -> None:
     assert summary["by_tag"]["teste"]["calls_live"] == 1
 
 
+def test_usage_summary_reports_processing_time(tmp_path: Path) -> None:
+    client = make_client(tmp_path, FakeProvider(["ok"], output_tokens=20))
+    client.generate(req("a"), tag="lote")
+    client.generate(req("b"), tag="lote")
+    client.generate(req("a"), tag="lote")  # cache hit: não conta como processamento
+    summary = summarize_usage(tmp_path / "usage.jsonl")
+    assert summary["processing_s_live"] == pytest.approx(1.0)
+    assert summary["processing_s_saved_by_cache"] == pytest.approx(0.5)
+    lote = summary["by_tag"]["lote"]
+    assert lote["s_per_call"] == pytest.approx(0.5)
+    assert lote["output_tokens_per_s"] == pytest.approx(40.0)
+
+
 def test_unknown_model_has_no_price(tmp_path: Path) -> None:
     client = make_client(tmp_path, FakeProvider(["ok"]))
     result = client.generate(req(model="sem-preco"))
@@ -210,8 +225,13 @@ def test_structured_retry_chain_is_reproducible_from_cache(tmp_path: Path) -> No
 
 def test_request_for_uses_role_settings(tmp_path: Path) -> None:
     client = make_client(tmp_path, FakeProvider(["ok"]))
+    client.roles["local"] = RoleSettings(
+        model=MODEL, max_tokens=128, think=False, options={"num_ctx": 4096}
+    )
     r = client.request_for("classifier", [{"role": "user", "content": "x"}], system="s")
     assert (r.model, r.max_tokens, r.effort, r.system) == (MODEL, 256, "low", "s")
+    r = client.request_for("local", [{"role": "user", "content": "x"}])
+    assert (r.think, r.options, r.effort) == (False, {"num_ctx": 4096}, None)
 
 
 # --- provedor Anthropic (SDK simulada, sem rede) ---
@@ -270,6 +290,15 @@ def test_anthropic_provider_omits_optional_params() -> None:
     assert set(params) == {"model", "max_tokens", "messages"}
 
 
+def test_anthropic_provider_maps_think_and_rejects_options() -> None:
+    off = AnthropicProvider.build_params(req().model_copy(update={"think": False}))
+    assert off["thinking"] == {"type": "disabled"}
+    on = AnthropicProvider.build_params(req().model_copy(update={"think": True}))
+    assert on["thinking"] == {"type": "adaptive"}
+    with pytest.raises(ValueError):
+        AnthropicProvider.build_params(req().model_copy(update={"options": {"seed": 1}}))
+
+
 # --- configuração ---
 
 
@@ -281,13 +310,23 @@ def test_config_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
     assert cfg["llm"]["roles"]["classifier"]["model"] == "outro-modelo"
 
 
-def test_client_from_config_without_api_key(tmp_path: Path) -> None:
-    """Construir o cliente não exige chave nem rede (a SDK é criada sob demanda)."""
+def test_client_from_config_defaults_to_local_ollama(tmp_path: Path) -> None:
+    """O padrão é o Ollama local, a custo zero; construir o cliente não acessa a rede."""
     cfg = load_config(load_env=False)
     cfg["llm"]["cache_dir"] = str(tmp_path / "c")
     cfg["llm"]["usage_log"] = str(tmp_path / "u.jsonl")
     client = LLMClient.from_config(cfg)
-    assert client.provider.name == "anthropic"
-    assert client.roles["classifier"].model == cfg["llm"]["roles"]["classifier"]["model"]
+    assert client.provider.name == "ollama"
+    classifier = client.roles["classifier"]
+    assert classifier.model == cfg["llm"]["roles"]["classifier"]["model"]
+    assert classifier.think is False and classifier.effort is None
     for model in {r.model for r in client.roles.values()}:
         assert model in client.prices.prices, f"modelo sem preço configurado: {model}"
+        assert client.prices.estimate(model, LLMUsage(input_tokens=10**6)) == 0.0
+
+
+def test_client_from_config_with_anthropic(tmp_path: Path) -> None:
+    """O provedor pago continua disponível e não exige chave para ser construído."""
+    cfg = load_config(load_env=False)
+    cfg["llm"].update(provider="anthropic", cache_dir=str(tmp_path / "c"))
+    assert LLMClient.from_config(cfg).provider.name == "anthropic"

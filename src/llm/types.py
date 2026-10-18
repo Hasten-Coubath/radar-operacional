@@ -23,7 +23,9 @@ class LLMRequest(BaseModel):
     system: str | None = None
     tools: list[dict[str, Any]] | None = None
     output_schema: dict[str, Any] | None = None  # JSON Schema (Pydantic) da saída esperada
-    effort: Effort | None = None
+    effort: Effort | None = None  # só Anthropic
+    think: bool | None = None  # modo de raciocínio; None = padrão do modelo
+    options: dict[str, Any] | None = None  # só Ollama: num_ctx, temperature, seed...
 
     def cache_key(self, provider: str) -> str:
         """SHA-256 do JSON canônico (provedor + modelo + prompt + entrada + parâmetros)."""
@@ -46,8 +48,13 @@ class LLMResponse(BaseModel):
     stop_reason: str | None
     model: str
     usage: LLMUsage
-    latency_s: float
+    latency_s: float  # tempo de parede da chamada, medido no cliente
     request_id: str | None = None
+    timings: dict[str, float] | None = None  # Ollama: load_s, prompt_eval_s, eval_s
+
+    @property
+    def thinking(self) -> str:
+        return "".join(b.get("thinking", "") for b in self.content if b.get("type") == "thinking")
 
     @property
     def text(self) -> str:

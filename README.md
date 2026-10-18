@@ -21,6 +21,16 @@ gestor de operações: **tem algo quebrando agora, onde, desde quando e qual o i
    somente leitura ao banco investiga via SQL e escreve um briefing; cada número do briefing é
    ligado à query que o gerou e reverificado automaticamente.
 
+## LLM local, custo zero
+
+Todo o uso de LLM roda localmente com o [Ollama](https://ollama.com) e o modelo `qwen3:4b`
+(alvo: RTX 4050 com 6 GB de VRAM). O custo em dinheiro é zero e as avaliações não saem da
+máquina. Em troca, o modelo é menor que os de API e cada chamada custa segundos de GPU. Por isso
+a métrica de custo nos relatórios é o **tempo de processamento**, e a classificação do dataset
+inteiro usa uma estratégia híbrida (baseline em tudo, LLM só onde o baseline tem baixa
+confiança). O provedor da Anthropic continua disponível como opção paga. Detalhes e trade-offs
+em [docs/decisoes.md](docs/decisoes.md) (D-010 a D-015).
+
 ## Arquitetura
 
 _(diagrama Mermaid na Fase 10)_
@@ -39,7 +49,7 @@ _(Fase 10)_
 
 ## Como rodar
 
-Requer Python 3.11+.
+Requer Python 3.11+ e, para as etapas com LLM, o [Ollama](https://ollama.com/download).
 
 ```bash
 python -m venv .venv
@@ -49,18 +59,23 @@ python -m venv .venv
 source .venv/bin/activate
 
 pip install -r requirements-dev.txt
-cp .env.example .env   # e preencha ANTHROPIC_API_KEY
-pytest
+pytest                 # testes rápidos, sem LLM
+
+ollama pull qwen3:4b   # ~2,5 GB
+pytest -m ollama       # teste real com o modelo local (um item)
 ```
+
+O `.env` é opcional (veja `.env.example`): só é preciso para sobrescrever configurações ou usar
+o provedor pago (`RADAR_LLM_PROVIDER=anthropic` + `ANTHROPIC_API_KEY`).
 
 Dados: baixe o [Brazilian E-Commerce Public Dataset by Olist](https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce)
 e coloque os CSVs em `data/raw/`. Os dados não são versionados.
 
-### Modo reprodutível (sem gastar API)
+### Modo reprodutível (sem rodar o modelo)
 
 Toda chamada ao LLM passa por um cache em disco (`cache/llm/`). Com `RADAR_LLM_MODE=cache_only`,
-o projeto só lê o cache: nenhuma chamada à API é feita e uma requisição ausente gera erro em vez
-de custo. O custo acumulado das chamadas reais sai em:
+o projeto só lê o cache: nenhum modelo é chamado e uma requisição ausente gera erro. O tempo de
+processamento acumulado, além de tokens e custo em dinheiro (zero com o Ollama), sai em:
 
 ```bash
 python -m src.llm
@@ -73,13 +88,13 @@ _(GIF do painel)_
 ## Estrutura
 
 ```
-config.yaml          modelos, caminhos, preços, modo do LLM
+config.yaml          provedor e modelo do LLM, caminhos, modo do cache
 data/raw/            CSVs da Olist (não versionados)
 data/processed/      dados limpos e banco SQLite (não versionados)
 data/gold/           gold set rotulado manualmente
 docs/                taxonomia, decisões, análise de erros
 prompts/             prompts versionados
 reports/             relatórios de avaliação
-src/llm/             cliente de LLM, cache em disco, custo
+src/llm/             cliente de LLM (Ollama/Anthropic), cache em disco, uso
 tests/               pytest
 ```

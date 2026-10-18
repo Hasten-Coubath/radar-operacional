@@ -32,6 +32,8 @@ class RoleSettings:
     model: str
     max_tokens: int
     effort: Effort | None = None
+    think: bool | None = None
+    options: dict[str, Any] | None = None
 
 
 @dataclass
@@ -52,6 +54,7 @@ class StructuredResult(Generic[T]):
 
     @property
     def latency_s(self) -> float:
+        """Tempo de processamento somado das tentativas (o original, mesmo em cache hit)."""
         return sum(a.response.latency_s for a in self.attempts)
 
 
@@ -84,9 +87,7 @@ class LLMClient:
         llm = (cfg or load_config())["llm"]
         return cls(
             provider=provider
-            or make_provider(
-                llm["provider"], timeout_s=llm["timeout_s"], max_retries=llm["max_retries"]
-            ),
+            or make_provider(llm["provider"], llm.get("providers", {}).get(llm["provider"])),
             cache=DiskCache(resolve_path(llm["cache_dir"])),
             prices=PriceTable.from_config(llm["pricing_usd_per_mtok"]),
             usage_logger=UsageLogger(resolve_path(llm["usage_log"])),
@@ -108,6 +109,8 @@ class LLMClient:
             model=r.model,
             max_tokens=r.max_tokens,
             effort=r.effort,
+            think=r.think,
+            options=r.options,
             messages=messages,
             system=system,
             tools=tools,
@@ -203,6 +206,7 @@ class LLMClient:
                 "cache_read_input_tokens": u.cache_read_input_tokens,
                 "cache_creation_input_tokens": u.cache_creation_input_tokens,
                 "latency_s": round(result.response.latency_s, 4),
+                "timings": result.response.timings,
                 "cost_usd_live": result.cost_usd_live,
                 "cost_usd_spent": result.cost_usd_spent,
             }

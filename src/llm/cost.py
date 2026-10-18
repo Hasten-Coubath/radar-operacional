@@ -1,4 +1,4 @@
-"""Preços por modelo, registro de uso (JSONL) e resumo de custo acumulado."""
+"""Preços por modelo, registro de uso (JSONL) e resumo de tempo de processamento e custo."""
 
 from __future__ import annotations
 
@@ -58,17 +58,28 @@ class UsageLogger:
             f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
 
+def _group() -> dict[str, Any]:
+    return {"calls_live": 0, "processing_s": 0.0, "output_tokens": 0, "cost_usd_spent": 0.0}
+
+
 def summarize_usage(path: Path) -> dict[str, Any]:
-    """Totais do log: chamadas reais × cache, tokens e custo gasto, por modelo e por tag."""
+    """Totais do log: chamadas reais × cache, tempo de processamento, tokens e custo.
+
+    O tempo de processamento (soma da latência das chamadas reais) é a métrica principal de
+    custo com modelos locais; `processing_s_saved_by_cache` é o tempo original das respostas
+    reaproveitadas do cache.
+    """
     summary: dict[str, Any] = {
         "calls_live": 0,
         "calls_cached": 0,
+        "processing_s_live": 0.0,
+        "processing_s_saved_by_cache": 0.0,
         "input_tokens_live": 0,
         "output_tokens_live": 0,
         "cost_usd_spent": 0.0,
         "calls_without_price": 0,
-        "by_model": defaultdict(lambda: {"calls_live": 0, "cost_usd_spent": 0.0}),
-        "by_tag": defaultdict(lambda: {"calls_live": 0, "cost_usd_spent": 0.0}),
+        "by_model": defaultdict(_group),
+        "by_tag": defaultdict(_group),
     }
     path = Path(path)
     if not path.exists():
@@ -78,11 +89,14 @@ def summarize_usage(path: Path) -> dict[str, Any]:
             if not line.strip():
                 continue
             rec = json.loads(line)
+            latency = rec.get("latency_s") or 0.0
             if rec["cached"]:
                 summary["calls_cached"] += 1
+                summary["processing_s_saved_by_cache"] += latency
                 continue
             cost = rec.get("cost_usd_spent")
             summary["calls_live"] += 1
+            summary["processing_s_live"] += latency
             summary["input_tokens_live"] += rec["input_tokens"]
             summary["output_tokens_live"] += rec["output_tokens"]
             if cost is None:
@@ -90,8 +104,16 @@ def summarize_usage(path: Path) -> dict[str, Any]:
                 cost = 0.0
             summary["cost_usd_spent"] += cost
             for group, name in (("by_model", rec["model"]), ("by_tag", rec.get("tag") or "-")):
-                summary[group][name]["calls_live"] += 1
-                summary[group][name]["cost_usd_spent"] += cost
-    summary["by_model"] = dict(summary["by_model"])
-    summary["by_tag"] = dict(summary["by_tag"])
+                g = summary[group][name]
+                g["calls_live"] += 1
+                g["processing_s"] += latency
+                g["output_tokens"] += rec["output_tokens"]
+                g["cost_usd_spent"] += cost
+    for group in ("by_model", "by_tag"):
+        for g in summary[group].values():
+            g["s_per_call"] = g["processing_s"] / g["calls_live"]
+            g["output_tokens_per_s"] = (
+                g["output_tokens"] / g["processing_s"] if g["processing_s"] else None
+            )
+        summary[group] = dict(summary[group])
     return summary

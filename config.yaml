@@ -10,29 +10,52 @@ paths:
   reports_dir: reports
 
 llm:
-  provider: anthropic
-  # live: usa o cache e chama a API nos misses.
-  # cache_only: só lê o cache; um miss gera erro (modo reprodutível, custo zero).
+  # ollama (padrão: local, custo zero, dados não saem da máquina) | anthropic (opcional, pago)
+  provider: ollama
+  # live: usa o cache e chama o modelo nos misses.
+  # cache_only: só lê o cache; um miss gera erro (modo reprodutível, sem processamento).
   mode: live
   cache_dir: cache/llm
   usage_log: logs/llm_usage.jsonl
-  timeout_s: 60
-  max_retries: 2
+
+  providers:
+    ollama:
+      base_url: http://localhost:11434
+      timeout_s: 300        # a 1ª chamada inclui carregar o modelo na GPU
+      keep_alive: 30m       # mantém o modelo carregado entre lotes
+    anthropic:
+      timeout_s: 60
+      max_retries: 2
 
   # Um papel = um uso do LLM no projeto. Modelo e parâmetros por papel.
+  # Trocar de modelo: mude `model` aqui (ou RADAR_CLASSIFIER_MODEL / RADAR_AGENT_MODEL).
   roles:
     classifier:
-      model: claude-haiku-5-5   # pequeno e barato, para classificação em lote
-      max_tokens: 1024
-      effort: low
+      model: qwen3:4b
+      max_tokens: 1024      # vira options.num_predict no Ollama (inclui tokens de raciocínio)
+      think: false          # raciocínio desligado por padrão; com/sem comparado na Fase 3
+      options:
+        num_ctx: 4096       # prompt + taxonomia + avaliação + JSON cabem com folga
+        temperature: 0      # decodificação gulosa: reduz variação entre execuções
+        seed: 42
     agent:
-      model: claude-opus-5-5    # provisório; escolha final justificada na Fase 8
-      max_tokens: 16000
-      effort: medium
+      model: qwen3:4b       # provisório; escolha final justificada na Fase 8
+      max_tokens: 4096
+      think: true
+      options:
+        num_ctx: 8192       # histórico com resultados de SQL; reavaliar na Fase 8 (VRAM 6 GB)
+        temperature: 0.6    # recomendação do Qwen3 para modo de raciocínio (gulosa causa loops)
+        seed: 42
 
-  # USD por milhão de tokens. Fonte: tabela de preços da Anthropic (consultada em 2026-10).
-  # cache_read/cache_write opcionais; se ausentes, são cobrados ao preço de input.
+    # Alternativa paga (provider: anthropic). `options` não se aplica; `effort` sim.
+    # classifier: {model: claude-haiku-5-5, max_tokens: 1024, effort: low}
+    # agent: {model: claude-opus-5-5, max_tokens: 16000, effort: medium}
+
+  # USD por milhão de tokens. Modelos locais custam zero em dinheiro; a métrica de custo
+  # nos relatórios é o tempo de processamento (logs/llm_usage.jsonl, `python -m src.llm`).
+  # Preços da Anthropic consultados em 2026-10; só usados se provider = anthropic.
   pricing_usd_per_mtok:
+    qwen3:4b: {input: 0, output: 0}
     claude-haiku-5-5: {input: 0.10, output: 0.50}
     claude-sonnet-5-5: {input: 2.00, output: 10.00, cache_read: 0.20}
     claude-opus-5-5: {input: 4.00, output: 20.00, cache_read: 0.20}

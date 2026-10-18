@@ -13,7 +13,10 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 # variável de ambiente -> caminho da chave em config.yaml
 ENV_OVERRIDES: dict[str, tuple[str, ...]] = {
+    "RADAR_LLM_PROVIDER": ("llm", "provider"),
     "RADAR_LLM_MODE": ("llm", "mode"),
+    # não usamos OLLAMA_HOST: o servidor o lê como endereço de bind (ex.: "0.0.0.0")
+    "RADAR_OLLAMA_URL": ("llm", "providers", "ollama", "base_url"),
     "RADAR_CLASSIFIER_MODEL": ("llm", "roles", "classifier", "model"),
     "RADAR_AGENT_MODEL": ("llm", "roles", "agent", "model"),
 }
