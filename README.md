@@ -71,6 +71,12 @@ o provedor pago (`RADAR_LLM_PROVIDER=anthropic` + `ANTHROPIC_API_KEY`).
 Dados: baixe o [Brazilian E-Commerce Public Dataset by Olist](https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce)
 e coloque os CSVs em `data/raw/`. Os dados não são versionados.
 
+```bash
+python -m src.data.make_db           # data/processed/radar.db (determinístico, ~20 s)
+python -m src.data.stats             # reports/fase1_dados.md + figuras
+python -m src.data.sample_taxonomy   # IDs da amostra usada para validar a taxonomia
+```
+
 ### Modo reprodutível (sem rodar o modelo)
 
 Toda chamada ao LLM passa por um cache em disco (`cache/llm/`). Com `RADAR_LLM_MODE=cache_only`,
@@ -92,9 +98,11 @@ config.yaml          provedor e modelo do LLM, caminhos, modo do cache
 data/raw/            CSVs da Olist (não versionados)
 data/processed/      dados limpos e banco SQLite (não versionados)
 data/gold/           gold set rotulado manualmente
+data/samples/        IDs de amostras auxiliares (sem texto)
 docs/                taxonomia, decisões, análise de erros
 prompts/             prompts versionados
 reports/             relatórios de avaliação
+src/data/            carga, limpeza, sinal de atraso, banco SQLite, estatísticas
 src/llm/             cliente de LLM (Ollama/Anthropic), cache em disco, uso
 tests/               pytest
 ```
