@@ -20,7 +20,7 @@ llm:
 
   providers:
     ollama:
-      base_url: http://localhost:11434
+      base_url: http://127.0.0.1:11434   # não "localhost": no Windows tenta IPv6 antes e perde ~2 s por chamada
       timeout_s: 300        # a 1ª chamada inclui carregar o modelo na GPU
       keep_alive: 30m       # mantém o modelo carregado entre lotes
     anthropic:

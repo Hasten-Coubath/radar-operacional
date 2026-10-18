@@ -29,6 +29,7 @@ class LLMProvider(Protocol):
 Transport = Callable[[str, dict[str, Any], float], dict[str, Any]]
 
 _STOP_REASONS = {"stop": "end_turn", "length": "max_tokens"}
+_THINK_START, _THINK_END = "<think>", "</think>"
 _TIMINGS = {
     "total_duration": "total_s",
     "load_duration": "load_s",
@@ -75,7 +76,7 @@ class OllamaProvider:
     def __init__(
         self,
         *,
-        base_url: str = "http://localhost:11434",
+        base_url: str = "http://127.0.0.1:11434",
         timeout_s: float = 120.0,
         keep_alive: str | None = None,
         transport: Transport | None = None,
@@ -109,10 +110,18 @@ class OllamaProvider:
     def parse_response(data: dict[str, Any], latency_s: float) -> LLMResponse:
         msg = data.get("message") or {}
         content: list[dict[str, Any]] = []
-        if msg.get("thinking"):
-            content.append({"type": "thinking", "thinking": msg["thinking"]})
-        if msg.get("content"):
-            content.append({"type": "text", "text": msg["content"]})
+        thinking = msg.get("thinking") or ""
+        text = msg.get("content") or ""
+        # Com ferramentas e think=false, o qwen3 (Ollama 0.40) às vezes escreve o raciocínio no
+        # texto, terminando em "</think>". Separamos para não vazar raciocínio como resposta.
+        if _THINK_END in text:
+            leaked, text = text.rsplit(_THINK_END, 1)
+            thinking += leaked.replace(_THINK_START, "").strip()
+            text = text.strip()
+        if thinking:
+            content.append({"type": "thinking", "thinking": thinking})
+        if text:
+            content.append({"type": "text", "text": text})
         for i, call in enumerate(msg.get("tool_calls") or []):
             fn = call.get("function") or {}
             args = fn.get("arguments") or {}
@@ -299,7 +308,7 @@ def make_provider(name: str, settings: dict[str, Any] | None = None) -> LLMProvi
     s = settings or {}
     if name == "ollama":
         return OllamaProvider(
-            base_url=s.get("base_url", "http://localhost:11434"),
+            base_url=s.get("base_url", "http://127.0.0.1:11434"),
             timeout_s=s.get("timeout_s", 120.0),
             keep_alive=s.get("keep_alive"),
         )

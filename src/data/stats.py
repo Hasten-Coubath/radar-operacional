@@ -17,6 +17,7 @@ import matplotlib.pyplot as plt  # noqa: E402
 import pandas as pd  # noqa: E402
 
 from src.config import load_config, resolve_path  # noqa: E402
+from src.data.point_in_time import load_orders, weekly_due_late_rate  # noqa: E402
 
 MIN_WEEKLY_COMMENTS = 100  # semanas com menos avaliações com comentário ficam fora da janela
 # O dataset só contém pedidos cuja pesquisa foi enviada até a última `review_creation_date`;
@@ -24,6 +25,13 @@ MIN_WEEKLY_COMMENTS = 100  # semanas com menos avaliações com comentário fica
 # esta margem antes do corte (79% dos atrasos têm até 14 dias; ver seção 6).
 LATE_CENSOR_MARGIN_DAYS = 14
 COVERAGE_THRESHOLDS = (1, 2, 5, 10, 20)
+# Janelas dos eventos vistos na exploração (seção 9), usadas só para localizar picos.
+EVENT_WINDOWS = {
+    "dez/2017 (pós-Black Friday)": ("2017-11-27", "2018-01-22"),
+    "mar–abr/2018": ("2018-02-26", "2018-05-07"),
+    "fim de mai–jun/2018": ("2018-05-21", "2018-06-25"),
+}
+LAGS = range(-2, 4)
 QUANTILES = (0.05, 0.25, 0.5, 0.75, 0.95, 0.99)
 
 
@@ -340,6 +348,9 @@ def main() -> None:
         """,
         late_end,
     )
+    pit = weekly_due_late_rate(
+        load_orders(con), [str(d.date()) for d in pd.date_range(start, late_end, freq="7D")]
+    ).rename(columns={"week": "semana", "due": "pedidos_vencidos", "late_rate": "frac_atraso"})
     win = weekly[(weekly["semana"] >= start) & (weekly["semana"] <= end)]
     vol = win[["avaliações", "comentadas"]].describe().loc[["min", "25%", "50%", "75%", "max"]]
     vol.insert(0, "estatística", vol.index)
@@ -357,7 +368,7 @@ def main() -> None:
         "![Volume semanal e nota média](figures/fase1_semanal.png)",
         "",
     ]
-    _plot_weekly(weekly, late_w, start, end, figures / "fase1_semanal.png")
+    _plot_weekly(weekly, late_w, pit, start, end, figures / "fase1_semanal.png")
 
     # --- 8. cobertura por segmento ---
     cov = segment_coverage(con, start, end)
@@ -373,8 +384,7 @@ def main() -> None:
     ]
 
     # --- 9. exploração temporal ---
-    lw = late_w[(late_w["semana"] >= start) & (late_w["semana"] <= end)]
-    lw = lw[lw["pedidos_entregues"] >= 200].copy()
+    lw = pit[pit["pedidos_vencidos"] >= 200][["semana", "pedidos_vencidos", "frac_atraso"]]
     base = lw["frac_atraso"].median()
     peaks = lw[lw["frac_atraso"] >= 2 * base].merge(
         weekly[["semana", "nota_média", "frac_neg"]], on="semana", how="left"
@@ -419,8 +429,11 @@ def main() -> None:
         "",
         f"### 9.1 Semanas com taxa nacional de atraso ≥ 2× a mediana ({pct(base)})",
         "",
-        "Semanas com ≥ 200 pedidos entregues; nota média e fração de notas ≤ 2 das "
-        "avaliações respondidas na mesma semana.",
+        "Atraso **point-in-time** (seção 11): coorte com data estimada na semana, conhecida "
+        "ao fim dela; pedidos nunca entregues contam como atrasados. Semanas com ≥ 200 "
+        "pedidos vencidos; nota média e fração de notas ≤ 2 das avaliações respondidas na "
+        "mesma semana. As seções 9.2 a 9.4 usam `orders.is_late` (data final de entrega): "
+        "são descrições retrospectivas, não sinais do backtest.",
         "",
         md_table(peaks, "{:.2f}"),
         "",
@@ -456,6 +469,8 @@ def main() -> None:
         md_table(_text_vs_outcome(con)),
         "",
     ]
+
+    out += _pit_section(late_w, pit, weekly, figures / "fase1_pit_vs_nota.png")
 
     path = reports / "fase1_dados.md"
     path.write_text("\n".join(out), encoding="utf-8", newline="\n")
@@ -547,8 +562,119 @@ def _seller_candidates(con: sqlite3.Connection, start: str, end: str) -> pd.Data
     )
 
 
+def _pit_section(
+    final: pd.DataFrame, pit: pd.DataFrame, weekly: pd.DataFrame, fig_path: Path
+) -> list[str]:
+    """Compara o atraso pela data final com o point-in-time, e ambos com a nota média."""
+    m = pit[["semana", "pedidos_vencidos", "late", "open_late", "frac_atraso"]].merge(
+        final[["semana", "frac_atraso"]].rename(columns={"frac_atraso": "frac_atraso_final"}),
+        on="semana",
+        how="left",
+    )
+    m = m.merge(weekly[["semana", "nota_média", "frac_neg"]], on="semana", how="left")
+    diff_pp = 100 * (m["frac_atraso"] - m["frac_atraso_final"])
+    corr_ff = m["frac_atraso"].corr(m["frac_atraso_final"])
+
+    # correlação entre o atraso na semana t e as avaliações respondidas na semana t + k
+    lag_rows = []
+    for label, series in (("point-in-time", "frac_atraso"), ("data final", "frac_atraso_final")):
+        for k in LAGS:
+            lag_rows.append(
+                {
+                    "atraso": label,
+                    "k (semanas)": k,
+                    "corr(atraso_t, nota média_t+k)": m[series].corr(m["nota_média"].shift(-k)),
+                    "corr(atraso_t, frac. nota ≤ 2_t+k)": m[series].corr(m["frac_neg"].shift(-k)),
+                }
+            )
+    lags = pd.DataFrame(lag_rows)
+    best = {
+        str(label): int(g.loc[g["corr(atraso_t, nota média_t+k)"].idxmin(), "k (semanas)"])
+        for label, g in lags.groupby("atraso")
+    }
+
+    ev_rows = []
+    for name, (a, b) in EVENT_WINDOWS.items():
+        e = m[(m["semana"] >= a) & (m["semana"] <= b)]
+        ev_rows.append(
+            {
+                "evento": name,
+                "pico de atraso (point-in-time)": e.loc[e["frac_atraso"].idxmax(), "semana"],
+                "pico de atraso (data final)": e.loc[e["frac_atraso_final"].idxmax(), "semana"],
+                "menor nota média": e.loc[e["nota_média"].idxmin(), "semana"],
+                "maior frac. nota ≤ 2": e.loc[e["frac_neg"].idxmax(), "semana"],
+            }
+        )
+    _plot_pit(m, fig_path)
+    return [
+        "## 11. Atraso point-in-time × data final × nota média",
+        "",
+        "**Auditoria.** `orders.is_late` usa a data final de entrega. Foi usado nas seções 6 "
+        "(nota por situação de entrega), 9.2–9.4 (estado e vendedor por mês) e 10 (desfecho dos "
+        "textos “não recebi”), que são descrições retrospectivas. A série semanal da Fase 1 "
+        "(gráfico e tabela 9.1) também usava `is_late`, indexada pela semana estimada; agora "
+        "usa a versão point-in-time.",
+        "",
+        "**Versão point-in-time** (`src/data/point_in_time.py`): para a semana t, coorte com data "
+        "estimada de t a t + 6, avaliada em t + 7 dias, usando só entregas anteriores a esse "
+        "instante. Para essa coorte o atraso já está decidido em t + 7 (o dia estimado passou), "
+        "então a diferença para a série pela data final está no denominador: pedidos nunca "
+        "entregues contam como atrasados em vez de ficarem de fora.",
+        "",
+        f"- Diferença point-in-time − data final, por semana: média {diff_pp.mean():+.2f} p.p., "
+        f"máxima {diff_pp.max():+.2f} p.p.; correlação entre as séries: {corr_ff:.3f}.",
+        f"- Atrasados ainda em aberto ao fim da semana estimada: {int(m['open_late'].sum())} de "
+        f"{int(m['late'].sum())} ({pct(m['open_late'].sum() / m['late'].sum())}).",
+        f"- Defasagem com a correlação mais negativa entre atraso e nota média: k = "
+        f"{best['point-in-time']} (point-in-time) e k = {best['data final']} (data final).",
+        "",
+        "Picos dentro de cada evento (semana, segunda-feira):",
+        "",
+        md_table(pd.DataFrame(ev_rows)),
+        "",
+        "Correlação entre o atraso da semana t e as avaliações respondidas em t + k:",
+        "",
+        md_table(lags, "{:.3f}"),
+        "",
+        "![Atraso point-in-time e nota média](figures/fase1_pit_vs_nota.png)",
+        "",
+    ]
+
+
+def _plot_pit(m: pd.DataFrame, path: Path) -> None:
+    fig, ax = plt.subplots(figsize=(11, 4))
+    x = pd.to_datetime(m["semana"])
+    ax.plot(x, 100 * m["frac_atraso"], color="#dd8452", label="% atraso (point-in-time)")
+    ax.plot(
+        x,
+        100 * m["frac_atraso_final"],
+        color="#dd8452",
+        ls="--",
+        alpha=0.6,
+        label="% atraso (data final)",
+    )
+    ax.set_ylabel("% atrasados (semana estimada)")
+    ax2 = ax.twinx()
+    ax2.plot(x, m["nota_média"], color="#c44e52", label="nota média (semana de resposta)")
+    ax2.set_ylabel("nota média (invertido)")
+    ax2.invert_yaxis()
+    h1, l1 = ax.get_legend_handles_labels()
+    h2, l2 = ax2.get_legend_handles_labels()
+    ax.legend(h1 + h2, l1 + l2, loc="upper left")
+    ax.grid(alpha=0.3)
+    ax.set_title("Atraso point-in-time × nota média")
+    fig.tight_layout()
+    fig.savefig(path, dpi=110)
+    plt.close(fig)
+
+
 def _plot_weekly(
-    weekly: pd.DataFrame, late_w: pd.DataFrame, start: str, end: str, path: Path
+    weekly: pd.DataFrame,
+    late_w: pd.DataFrame,
+    pit: pd.DataFrame,
+    start: str,
+    end: str,
+    path: Path,
 ) -> None:
     w = weekly[(weekly["semana"] >= start) & (weekly["semana"] <= end)]
     lw = late_w[(late_w["semana"] >= start) & (late_w["semana"] <= end)]
@@ -560,7 +686,21 @@ def _plot_weekly(
     axes[0].legend(loc="upper left")
     axes[1].plot(x, w["nota_média"], color="#c44e52")
     axes[1].set_ylabel("nota média")
-    axes[2].plot(pd.to_datetime(lw["semana"]), 100 * lw["frac_atraso"], color="#dd8452")
+    axes[2].plot(
+        pd.to_datetime(pit["semana"]),
+        100 * pit["frac_atraso"],
+        color="#dd8452",
+        label="point-in-time",
+    )
+    axes[2].plot(
+        pd.to_datetime(lw["semana"]),
+        100 * lw["frac_atraso"],
+        color="#dd8452",
+        ls="--",
+        alpha=0.6,
+        label="data final",
+    )
+    axes[2].legend(loc="upper left")
     axes[2].set_ylabel("% atrasados\n(semana estimada)")
     for ax in axes:
         ax.grid(alpha=0.3)

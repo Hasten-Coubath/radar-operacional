@@ -99,5 +99,6 @@ def test_tool_call_one_item(cfg: dict[str, object], tmp_path: Path) -> None:
     result = client.generate(request, tag="teste_ollama")
     print(f"\n{result.response.content} | {result.response.latency_s:.2f}s")
     assert result.response.stop_reason == "tool_use"
+    assert "</think>" not in result.response.text, "raciocínio vazou para o texto"
     call = result.response.tool_uses[0]
     assert call["name"] == "query_sql" and "select" in call["input"]["sql"].lower()

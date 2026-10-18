@@ -153,6 +153,22 @@ def test_tool_call_roundtrip() -> None:
     ]
 
 
+def test_leaked_reasoning_before_think_end_is_moved_to_thinking() -> None:
+    """Visto no Ollama 0.40 + qwen3 com ferramentas e think=false."""
+    reply = ollama_reply(
+        content="Okay, the user wants a count.\n</think>\n\n",
+        tool_calls=[{"function": {"name": "query_sql", "arguments": {"sql": "SELECT 1"}}}],
+    )
+    response = OllamaProvider.parse_response(reply, 0.1)
+    assert response.text == ""
+    assert response.thinking == "Okay, the user wants a count."
+    assert [b["type"] for b in response.content] == ["thinking", "tool_use"]
+
+    reply = ollama_reply(content='<think>hmm</think>{"a": 1}')
+    response = OllamaProvider.parse_response(reply, 0.1)
+    assert (response.thinking, response.text) == ("hmm", '{"a": 1}')
+
+
 def test_string_tool_arguments_are_decoded() -> None:
     reply = ollama_reply(tool_calls=[{"function": {"name": "f", "arguments": '{"a": 1}'}}])
     assert OllamaProvider.parse_response(reply, 0.1).tool_uses[0]["input"] == {"a": 1}
