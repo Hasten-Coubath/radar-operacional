@@ -693,3 +693,52 @@ corpus da Fase 1 ou do dev, com os rótulos v1:
   prompt real (cerca de 1.000 tokens) e da justificativa (cerca de 60 tokens).
 - O log `logs/llm_usage.jsonl` registra as 10 chamadas. O benchmark e os testes reais usam um
   diretório temporário de propósito, e por isso o log estava vazio antes.
+
+### D-039 · Fase 6: classificar só comentários com nota ≤ 3
+- **Decidido pelo usuário** com a coluna do dev de `reports/gold_set.md`: notas 1 a 3 cobrem
+  88,2% do volume reponderado de problemas (todas as classes exceto `elogio`). No universo,
+  notas 1 a 3 são 36,1% dos comentários.
+- **Regra:** comentários com nota 4 ou 5 recebem o status `nao_classificado`.
+  - **Nunca** são tratados como `elogio`.
+  - Ficam fora das contagens de causa do detector.
+- **Perda estimada por classe**, na coluna do dev: fração reponderada do volume da classe que
+  está em notas 4–5 e não será classificada.
+
+  | Classe | Perda | n no dev |
+  |---|---|---|
+  | `problema_atendimento_ou_comunicacao` | **84,4%** (a mais afetada) | 3 |
+  | `outro` | 38,6% | 4 |
+  | `qualidade_insatisfatoria` | 20,2% | 6 |
+  | `problema_entrega` | 12,0% | 18 |
+  | `produto_defeituoso_ou_danificado`, `produto_diferente_do_anunciado`, `pedido_incompleto_ou_errado` | 0% | 6, 8, 12 |
+  | todas exceto `elogio` | 11,8% | 57 |
+
+  Com n tão pequeno, as perdas de atendimento e `outro` são só ordens de grandeza, e os splits
+  discordam: no test, os 2 itens de atendimento estão em nota ≤ 3 (perda de 0%), e com os dois
+  splits juntos a perda de atendimento é de 44,4% (n = 5). O número do dev é o usado na
+  decisão, como pediu o usuário, mas a perda real de atendimento é incerta.
+- **Consequência para o detector:** reclamações de atendimento ficam quase invisíveis para o
+  Radar. Isso vai para as Limitações do README.
+- **Ponto aberto para antes da Fase 7:** o denominador da proporção de cada causa. Pode ser
+  todos os comentários do segmento e semana, incluindo os `nao_classificado`, ou só os
+  classificados. A escolha deve ser fixada antes da calibração.
+
+### D-040 · Baseline e métricas da Fase 3: detalhes fixados antes de rodar
+- **Baseline** (`src/classifier/baseline.py`), com hiperparâmetros escolhidos a priori e
+  rodado uma única vez, sem busca:
+  - TF-IDF de palavras (1–2) e de caracteres (`char_wb`, 2–5, `min_df` 2);
+  - one-hot da nota;
+  - regressão logística com `C = 10` e `class_weight = "balanced"`.
+
+  O `C` maior que o padrão compensa as poucas amostras por classe.
+- **Validação cruzada:** o scikit-learn avisou que a menor classe (atendimento, 3 itens) tem
+  menos membros que as 5 partes. O aviso foi registrado, sem contornar.
+- **Métricas** (`src/eval/classification.py`):
+  - falha de schema conta como erro (rótulo `FAIL`);
+  - macro-F1 nas 8 classes, com intervalo de confiança de 95% por bootstrap (1.000
+    reamostragens, semente 42);
+  - versão reponderada com o peso da nota de cada item (D-028).
+- **Tempo por item:** latência da chamada para o LLM, com o modelo carregado; só a previsão
+  para o baseline, com o tempo de ajuste em `fit_s`.
+- **Concordância com o sinal objetivo de entrega:** só observação, sem métrica (D-033). Usa o
+  sinal retrospectivo (`orders.is_late` ou pedido sem entrega).

@@ -44,7 +44,15 @@ _(ver [docs/erros.md](docs/erros.md))_
 
 ## Limitações
 
-_(Fase 10)_
+_(Lista parcial; completada na Fase 10.)_
+
+- **Só comentários com nota ≤ 3 são classificados** (D-039). Notas 4–5 ficam
+  `nao_classificado`, não `elogio`. Estimativa no dev: perde-se cerca de 12% do volume de
+  problemas e até cerca de 84% das reclamações de atendimento, que aparecem em notas altas
+  (estimativa incerta: 5 itens no gold set). O Radar vê mal os problemas de atendimento.
+- **Seleção do dataset:** só há pedidos que receberam pesquisa até 31/08/2018 (D-020).
+- **Área responsável por mapeamento fixo** (D-027, D-034): avaria no transporte cai em
+  `vendedor`, e cancelamento por falta de estoque cai em `logistica`.
 
 ## Como rodar
 

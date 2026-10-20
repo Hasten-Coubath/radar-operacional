@@ -84,7 +84,7 @@ usuário.
 | 1 | Dados, banco e taxonomia | concluída (D-016 a D-023) |
 | 1.1 | Sinal de atraso point-in-time e correções | concluída (D-024 a D-026) |
 | 2 | Ferramenta de rotulagem e gold set | concluída (D-027 a D-032; ajustes D-033 a D-037) |
-| 3 | Baseline e LLM v1 no dev | em andamento |
+| 3 | Baseline e LLM v1 no dev | concluída, aguardando revisão (D-038 a D-040) |
 | 4 | Análise de erros e LLM v2 | — |
 | 5 | Avaliação final no test set (uma vez) | — |
 | 6 | Classificação em lote | — |
@@ -154,12 +154,13 @@ usuário.
 - Métricas como na Fase 3, mais intervalos de confiança.
 
 ### Fase 6 — Classificação em lote
-- Três opções, escolhidas com a qualidade medida na Fase 5 e o tempo estimado:
-  - híbrida: baseline em tudo e LLM onde ele tiver baixa confiança (D-015);
-  - LLM em todos os comentários (D-032);
-  - recorte por notas ≤ 3: 36,1% dos comentários, com a cobertura por classe em
-    `reports/gold_set.md`.
-- Execução retomável, com o cache como ponto de retomada, estimativa de tempo e OK do usuário.
+- **Decidido (D-039):** classificar só os comentários com nota ≤ 3, cerca de 36% do total.
+  Notas 4–5 ficam `nao_classificado`, nunca `elogio`, e fora das contagens de causa do
+  detector.
+- **Perda estimada:** atendimento perde cerca de 84% do seu volume e o total de problemas
+  cerca de 12%; detalhe em D-039.
+- **Configuração:** a do LLM escolhida nas Fases 4 e 5. Execução retomável, com o cache como
+  ponto de retomada, estimativa de tempo e OK do usuário.
 
 ### Fase 7 — Detector e backtest
 - **Definição de incidente, linhas de base, métricas e períodos congelados em D-026.** A
