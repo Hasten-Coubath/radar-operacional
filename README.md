@@ -38,6 +38,37 @@ incidentes com mais informação que a queda da nota.
    - O acesso ao banco é somente leitura, num banco recortado no fim da semana do alerta.
    - Cada número do briefing aponta para a consulta que o gerou, e o verificador a reexecuta.
 
+## Arquitetura
+
+```mermaid
+flowchart LR
+    raw["CSVs da Olist<br/>data/raw"] --> db[("radar.db<br/>SQLite determinístico")]
+    db --> gold["Gold set<br/>rotulagem manual"]
+    db --> clf["Classificador LLM<br/>qwen3:4b via Ollama"]
+    prompts["prompts versionados"] --> clf
+    clf <--> cache[("cache em disco")]
+    clf --> preds["Previsões por review_id<br/>data/predictions"]
+    gold --> evalc["Avaliação<br/>dev; test uma única vez"]
+    preds --> evalc
+    db --> pit["Sinal de atraso<br/>point-in-time"]
+    preds --> det["Detector semanal<br/>Radar, B1, B2, B3"]
+    pit --> det
+    det --> bt["Backtest<br/>calibração 2017, avaliação 2018"]
+    det --> alerts["Alertas"]
+    alerts --> snap[("Banco recortado<br/>no fim da semana do alerta")]
+    db --> snap
+    snap --> agent["Agente SQL<br/>somente leitura"]
+    agent --> ver["Verificador<br/>reexecuta cada consulta"]
+    ver --> panel["Painel Streamlit<br/>replay e briefings"]
+    alerts --> panel
+
+    classDef andamento stroke-dasharray: 5 5
+    class det,bt,alerts,snap,agent,ver,panel andamento
+```
+
+Contorno tracejado: código e testes prontos, resultados em andamento (veja
+[Em andamento](#em-andamento)).
+
 ## Resultados até aqui
 
 ### Classificador de causa: test set, avaliação única (Fase 5)
@@ -98,7 +129,7 @@ O IC é por bootstrap.
 | **Fase 7:** backtest do Radar contra B1 (nota média), B2 (notas ≤ 2) e B3 (atraso) | código e testes prontos; a calibração em 2017 roda quando o lote cobrir 2017, e a avaliação em 2018, uma única vez, com o lote completo |
 | **Fase 8:** agente investigador com verificador | código e testes prontos, com provedor simulado; as chamadas reais ao modelo ficam para depois do lote, para não disputar a GPU |
 | **Fase 5 (complemento):** modo com raciocínio no test, só como comparação | depois do lote |
-| **Fase 9:** painel Streamlit | não iniciado |
+| **Fase 9:** painel Streamlit (linha do tempo de alertas, replay por semana, briefings com selo por afirmação) | esqueleto pronto, com dados sintéticos sinalizados; passa a ler os alertas e briefings reais quando existirem |
 
 ## Como o projeto evita se enganar
 
@@ -135,7 +166,7 @@ Requer Python 3.11+ (desenvolvido em 3.12) e, para as etapas com LLM, o
 python -m venv .venv
 .venv\Scripts\activate          # Windows  (Linux/macOS: source .venv/bin/activate)
 pip install -r requirements-dev.txt
-pytest                          # 122 testes rápidos, sem LLM nem dados
+pytest                          # 126 testes rápidos, sem LLM nem dados
 ```
 
 **Dados:** baixe o [Brazilian E-Commerce Public Dataset by Olist](https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce)
@@ -168,10 +199,11 @@ python -m src.classifier.baseline                          # baseline com valida
 python -m src.classifier.batch --estimate                  # Fase 6: contagem e tempo estimado
 ```
 
-**Rotulagem** (ferramenta usada no gold set; não chama LLM):
+**Rotulagem** (ferramenta usada no gold set; não chama LLM) e **painel**:
 
 ```bash
 streamlit run src/labeling/app.py    # http://127.0.0.1:8501
+streamlit run src/app/painel.py      # dados sintéticos até o backtest gerar alertas
 ```
 
 **Modo reprodutível.** Toda chamada ao LLM passa por um cache em disco (`cache/llm/`, não
@@ -218,6 +250,7 @@ src/eval/            métricas e relatórios do classificador
 src/detection/       detector, gabarito de incidentes e backtest
 src/agent/           SQL somente leitura, banco recortado, verificador e agente
 src/llm/             cliente de LLM (Ollama/Anthropic), cache em disco, uso
+src/app/             painel Streamlit (replay, alertas, briefings)
 tests/               pytest
 ```
 
