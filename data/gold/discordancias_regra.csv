@@ -1,0 +1,5 @@
+review_id,causa_gold,causa_pela_regra,origem
+0e0e6e39f00a8d298f47f25760b56763,qualidade_insatisfatoria,produto_defeituoso_ou_danificado,"docs/erros.md, Fase 3, erros do LLM v1 sem raciocínio"
+251571af902e3c4c70e61961e01b026d,qualidade_insatisfatoria,produto_defeituoso_ou_danificado,"docs/erros.md, Fase 3, erros do LLM v1 sem raciocínio"
+e0fa89c5f8235c3f82886a625380f1f9,qualidade_insatisfatoria,produto_diferente_do_anunciado,"docs/erros.md, Fase 3, erros do LLM v1 sem raciocínio"
+14cbabf3490837a3af22eb045eed5f40,problema_entrega,pedido_incompleto_ou_errado,"docs/erros.md, Fase 3, erros do LLM v1 sem raciocínio"

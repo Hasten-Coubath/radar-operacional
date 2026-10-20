@@ -742,3 +742,20 @@ corpus da Fase 1 ou do dev, com os rótulos v1:
   para o baseline, com o tempo de ajuste em `fit_s`.
 - **Concordância com o sinal objetivo de entrega:** só observação, sem métrica (D-033). Usa o
   sinal retrospectivo (`orders.is_late` ou pedido sem entrega).
+
+### D-041 · O gold set não muda com base nas previsões do modelo
+- **Regra do usuário (2026-10-20):** nenhum rótulo do gold set é alterado com base nas
+  previsões de qualquer modelo.
+- **As 4 discordâncias em que a regra apoia o modelo** (`docs/erros.md`, categoria 1) ficam
+  anotadas em `data/gold/discordancias_regra.csv`. O arquivo tem o rótulo original e a causa
+  que a regra escrita da v1.1 daria, e é uma anotação, não um rótulo.
+- **Métrica principal:** o macro-F1 principal usa os rótulos originais e é a estimativa
+  conservadora.
+- **Métrica secundária:** nesses 4 itens, a previsão igual à causa da regra também conta como
+  acerto. É calculada para todos os métodos e aparece sempre identificada como secundária
+  (`reports/fase3_dev.md`).
+  - **Viés declarado:** os itens saíram da leitura dos erros do LLM v1 sem raciocínio, então a
+    métrica secundária favorece esse método.
+- **Fase 4:** o prompt não é ajustado para imitar esses rótulos questionáveis. Se a taxonomia
+  precisar de redação mais clara, isso é registrado como melhoria para uma versão futura
+  (`docs/erros.md`, "Melhorias de redação") e não é aplicado à v1.1.

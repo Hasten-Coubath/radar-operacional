@@ -32,6 +32,9 @@ desde quando e qual o impacto?** São três camadas:
   congelados.
 - Proibido usar o LLM para pré-rotular o gold set (avaliação circular). Os campos removidos em
   D-033 não são inferidos de nenhuma forma.
+- Nenhum rótulo do gold set é alterado com base nas previsões de um modelo (D-041). O prompt
+  não é ajustado para imitar rótulos questionáveis; melhorias de redação da taxonomia ficam
+  para uma versão futura. O macro-F1 principal usa os rótulos originais.
 - Backtest: a semana *t* só usa dados que já existiriam em *t* (D-019, D-025, D-030).
 - Nunca versionar `.env`, chaves ou dados brutos. Os CSVs da Olist são baixados manualmente pelo
   usuário para `data/raw/`; o projeto nunca os baixa sozinho. `cache/` e `logs/` também não

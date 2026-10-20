@@ -45,6 +45,18 @@ METHODS = (
     Method("LLM v1 com raciocínio", "classifier_think_v1_dev.csv"),
 )
 ERRORS_OF = "classifier_v1_dev.csv"  # lista de erros para a análise da Fase 4
+RULE_FILE = "discordancias_regra.csv"  # D-041: anotação, não altera o gold
+
+
+def rule_supported(gold: pd.DataFrame, pred: pd.DataFrame, rule: pd.DataFrame) -> pd.DataFrame:
+    """Métrica secundária (D-041): nos itens anotados, a previsão igual à causa dada pela regra
+    escrita conta como acerto. Os rótulos originais não mudam; nos demais itens nada muda."""
+    alt = rule.set_index("review_id")["causa_pela_regra"]
+    p = pred.set_index("review_id")["causa"]
+    g = gold.copy()
+    hit = g["review_id"].isin(alt.index) & (g["review_id"].map(p) == g["review_id"].map(alt))
+    g.loc[hit, "causa"] = g.loc[hit, "review_id"].map(alt)
+    return g
 
 
 def summary_row(name: str, s: Scored, pred: pd.DataFrame) -> dict[str, str]:
@@ -186,6 +198,8 @@ def main() -> None:
         else:
             missing.append(m.name)
     scored = {name: align(gold, p, weights) for name, p in preds.items()}
+    rule_path = gold_dir / RULE_FILE
+    rule = pd.read_csv(rule_path, dtype=str) if rule_path.exists() else None
     n_clear = int((gold["causa"] != AMBIGUOUS).sum())
 
     out = [
@@ -209,6 +223,32 @@ def main() -> None:
         "",
         md_table(pd.DataFrame([summary_row(n, scored[n], preds[n]) for n in preds])),
         "",
+    ]
+    if rule is not None:
+        alt_rows = []
+        for name, p in preds.items():
+            s_alt = align(rule_supported(gold, p, rule), p, weights)
+            alt_rows.append(
+                {
+                    "método": name,
+                    "macro-F1 (secundário)": f"{macro_f1(s_alt, reweighted=False):.3f}",
+                    "macro-F1 reponderado (secundário)": f"{macro_f1(s_alt, reweighted=True):.3f}",
+                    "acurácia (secundária)": f"{accuracy(s_alt, reweighted=False):.3f}",
+                }
+            )
+        out += [
+            "### Métrica secundária: discordâncias em que a regra apoia o modelo (D-041)",
+            "",
+            "**Não é a métrica principal.** A principal (acima) usa os rótulos originais e é a "
+            f"estimativa conservadora. Aqui, nos {len(rule)} itens de `data/gold/{RULE_FILE}`, "
+            "a previsão igual à causa dada pela regra escrita da taxonomia v1.1 também conta "
+            "como acerto; nenhum rótulo foi alterado. Viés: os itens saíram da leitura dos "
+            "erros do LLM v1 sem raciocínio, então esta métrica favorece esse método.",
+            "",
+            md_table(pd.DataFrame(alt_rows)),
+            "",
+        ]
+    out += [
         "## Métricas por classe",
         "",
     ]

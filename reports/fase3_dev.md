@@ -15,6 +15,15 @@ _Gerado por `python -m src.eval.dev_report`. Não edite à mão._
 | baseline TF-IDF+LR (CV 5 partes) | 0.408 [0.282; 0.508] | 0.401 | 0.625 | 0.759 | 0/100 (0.0%) | 0.000938 (0.00104) | — |
 | LLM v1 sem raciocínio | 0.846 [0.676; 0.937] | 0.804 | 0.906 | 0.913 | 0/100 (0.0%) | 1.36 (1.41) | 0 |
 
+### Métrica secundária: discordâncias em que a regra apoia o modelo (D-041)
+
+**Não é a métrica principal.** A principal (acima) usa os rótulos originais e é a estimativa conservadora. Aqui, nos 4 itens de `data/gold/discordancias_regra.csv`, a previsão igual à causa dada pela regra escrita da taxonomia v1.1 também conta como acerto; nenhum rótulo foi alterado. Viés: os itens saíram da leitura dos erros do LLM v1 sem raciocínio, então esta métrica favorece esse método.
+
+| método | macro-F1 (secundário) | macro-F1 reponderado (secundário) | acurácia (secundária) |
+|---|---|---|---|
+| baseline TF-IDF+LR (CV 5 partes) | 0.418 | 0.408 | 0.635 |
+| LLM v1 sem raciocínio | 0.921 | 0.895 | 0.948 |
+
 ## Métricas por classe
 
 ### baseline TF-IDF+LR (CV 5 partes)

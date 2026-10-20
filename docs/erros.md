@@ -10,7 +10,7 @@ alterado nesta seção.
 Foram 9 erros em 96 itens não ambíguos. A tabela mostra o rótulo do gold set, a previsão do
 modelo e se a previsão segue a regra escrita na taxonomia v1.1.
 
-| review_id | nota | gold | previsto | o que o texto diz (paráfrase) | regra escrita da v1.1 favorece |
+| review_id | nota | gold | previsto | o que o texto diz (paráfrase) | regra escrita da v1.1 apoia |
 |---|---|---|---|---|---|
 | `0e0e6e39` | 4 | qualidade | defeito | suporte bom, mas a tampa é frágil e quebrou ao abrir | **previsto** (falha física descrita → defeito) |
 | `251571af` | 3 | qualidade | defeito | a alça do cooler puxa o velcro e abre com peso | **previsto** (falha de funcionamento descrita) |
@@ -24,15 +24,18 @@ modelo e se a previsão segue a regra escrita na taxonomia v1.1.
 
 ### Categorias
 
-1. **Conflito entre o rótulo e a definição escrita (4 erros).** Nesses itens, a regra da
-   taxonomia v1.1 dá a resposta do modelo, não o rótulo.
+1. **Discordâncias em que a regra apoia o modelo (4 erros).** Nesses itens, a regra escrita
+   da taxonomia v1.1 dá a resposta do modelo, não o rótulo. Eles estão anotados em
+   `data/gold/discordancias_regra.csv` (D-041).
    - Três vêm do remapeamento mecânico de D-034: itens com a nota "qualidade ruim" viraram
      `qualidade_insatisfatoria`, mas o texto descreve uma falha física ou compara com o
      anúncio. A definição da nova classe exclui esses dois casos.
    - O quarto (`14cbabf3`) é uma entrega parcial rotulada como `problema_entrega`. Pela regra,
      "comprei dois, recebi um" é `pedido_incompleto_ou_errado`.
-   - **Não são erros claros do modelo.** Resolver exige decidir qual das duas coisas manda: o
-     rótulo ou a definição. Isso fica para o usuário na Fase 4.
+   - **Regra do usuário (D-041):** os rótulos não mudam. A métrica principal conta esses 4
+     itens como erro (estimativa conservadora). Um número alternativo, que os conta como
+     acerto quando a previsão segue a regra, aparece só como métrica secundária identificada
+     em `reports/fase3_dev.md`.
 2. **Palavra-chave de entrega numa avaliação positiva (1 erro, `31369d4a`).** "Prazo" levou a
    `problema_entrega` num elogio explícito. É um erro do modelo.
 3. **Regra de embalagem ignorada (1 erro, `bb385b4d`).** O prompt tem a regra, mas o modelo
@@ -47,7 +50,21 @@ modelo e se a previsão segue a regra escrita na taxonomia v1.1.
 ### Observações para a Fase 4
 - A confiança do modelo nos erros foi de 0,80 a 0,95. Nesta amostra, ela não separa erros de
   acertos, então não serve como filtro.
-- **Risco de viés:** revisar só os rótulos que o modelo errou enviesaria o gold set a favor do
-  modelo. Se o usuário decidir revisar o conflito da categoria 1, a revisão deve cobrir a
-  classe inteira, nos dois splits e sem ver as previsões: os 18 itens de
-  `qualidade_insatisfatoria` e as entregas parciais.
+- **Nenhum rótulo é alterado com base nas previsões do modelo (D-041).** O prompt também não
+  é ajustado para imitar os 4 rótulos da categoria 1: a v2 segue a regra escrita.
+
+## Melhorias de redação para uma versão futura da taxonomia
+
+Registradas aqui, sem aplicar. Valem para uma versão futura da taxonomia, não para a v1.1
+usada nas Fases 3 a 5.
+
+- **`qualidade_insatisfatoria` × falha física e × anúncio.** A classe veio do remapeamento
+  mecânico das notas "qualidade ruim", mas a definição exclui falha física descrita e
+  comparação com o anúncio. Uma versão futura deve escolher entre duas saídas:
+  - redefinir a classe para cobrir "fragilidade" como julgamento de qualidade;
+  - ou deixar explícito que "frágil, quebrou" é defeito.
+- **Entrega parcial × "não recebi".** "Não recebi um dos itens" pode ser lido como problema de
+  entrega ou como pedido incompleto. A regra atual (incompleto) deveria aparecer na definição de
+  `problema_entrega`, e não só nos casos difíceis.
+- **Aviso de retirada nos Correios.** Falta dizer onde fica a queixa "deveriam ter avisado"
+  sobre a forma de entrega: hoje há uma tensão entre `outro` (retirada) e atendimento (aviso).
