@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Final
+from typing import Final, Literal, get_args
 
 TAXONOMY_VERSION = "v1.1"
 
@@ -22,6 +22,17 @@ CAUSES: tuple[str, ...] = (
     "elogio",
     "outro",
 )
+Cause = Literal[
+    "problema_entrega",
+    "produto_defeituoso_ou_danificado",
+    "produto_diferente_do_anunciado",
+    "pedido_incompleto_ou_errado",
+    "qualidade_insatisfatoria",
+    "problema_atendimento_ou_comunicacao",
+    "elogio",
+    "outro",
+]
+assert get_args(Cause) == CAUSES
 AMBIGUOUS: Final = "ambiguo"  # só na rotulagem humana: "ambíguo / não sei"
 
 # Mapeamento fixo causa -> área responsável (D-027). Não é rotulado nem previsto.

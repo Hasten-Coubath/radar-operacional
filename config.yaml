@@ -38,6 +38,14 @@ llm:
         num_ctx: 4096       # prompt + taxonomia + avaliação + JSON cabem com folga
         temperature: 0      # decodificação gulosa: reduz variação entre execuções
         seed: 42
+    classifier_think:     # mesmo classificador com raciocínio, comparado na Fase 3 (D-011, D-038)
+      model: qwen3:4b
+      max_tokens: 4096      # o raciocínio gasta ~1.000 tokens (D-024); 1024 truncaria
+      think: true
+      options:
+        num_ctx: 8192       # prompt + raciocínio + JSON não cabem em 4096
+        temperature: 0      # D-011: se entrar em repetição, registrar e testar 0.6
+        seed: 42
     agent:
       model: qwen3:4b       # provisório; escolha final justificada na Fase 8
       max_tokens: 4096

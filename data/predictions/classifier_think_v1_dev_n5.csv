@@ -1,0 +1,6 @@
+review_id,split,prompt_version,model,think,num_ctx,temperature,causa,gravidade,confianca,area,schema_ok,attempts,cached,latency_s,input_tokens,output_tokens,stop_reason,cache_key
+9a5485fb285fcf24b140dd746a1b5b5d,dev,v1,qwen3:4b,True,8192,0,pedido_incompleto_ou_errado,alta,0.85,vendedor,True,1,False,33.369,1024,1716,end_turn,3783e10087dc0b7860a0ecc9bba987f337c7afc0358e010fcd0721dcc1ed1ea9
+07baff5ff2bc9e35a498103833c4f957,dev,v1,qwen3:4b,True,8192,0,elogio,baixa,1.0,nenhuma,True,1,False,16.137,1006,841,end_turn,3ac5b22f865bcd079380f3b5a050cbaff62dd3910a9f0c1591301cc302dd771c
+697db01d0c60ff15b72b7f87a4d6812d,dev,v1,qwen3:4b,True,8192,0,elogio,baixa,1.0,nenhuma,True,1,False,15.685,996,829,end_turn,372130f39d5f05ccad0e99b6c2a526cdc124f6b8c5ffadf1e854617db960be8b
+b52755ab9c9e10d0d87d1716ac19f38d,dev,v1,qwen3:4b,True,8192,0,elogio,baixa,0.95,nenhuma,True,1,False,21.04,996,1106,end_turn,30cce3c83b347f58fb5eb8dba11b3f89cb82111d8bb4e21c4ded53c27ba134a7
+614b4dcb9b3bee9594fbfc6ff11f245b,dev,v1,qwen3:4b,True,8192,0,elogio,baixa,0.95,nenhuma,True,1,False,22.019,998,1125,end_turn,73d9b0521e53ccf050161e8cdfb2cc7da0b507566932495089fb7f39a705c9eb

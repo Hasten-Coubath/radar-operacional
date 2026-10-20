@@ -7,26 +7,14 @@ import os
 import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Literal, get_args
+from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
-from src.taxonomy import AMBIGUOUS, CAUSES
+from src.taxonomy import AMBIGUOUS, Cause
 
 LABELS_FILE = "labels.csv"
 MAX_NOTE_CHARS = 200
-
-Cause = Literal[
-    "problema_entrega",
-    "produto_defeituoso_ou_danificado",
-    "produto_diferente_do_anunciado",
-    "pedido_incompleto_ou_errado",
-    "qualidade_insatisfatoria",
-    "problema_atendimento_ou_comunicacao",
-    "elogio",
-    "outro",
-]
-assert set(get_args(Cause)) == set(CAUSES)
 
 
 class Label(BaseModel):

@@ -88,6 +88,14 @@ python -m src.labeling.report        # reports/gold_set.md: distribuição dos r
 
 Plano de fases e regras do projeto: [docs/plano.md](docs/plano.md).
 
+Classificador LLM (Fase 3; só o dev, o test set é bloqueado até a Fase 5):
+
+```bash
+python -m src.classifier.run --role classifier --limit 5         # medição de tempo em 5 itens
+python -m src.classifier.run --role classifier_think --limit 5   # idem, com raciocínio
+python -m src.classifier.run --role classifier --confirm         # dev inteiro (> 50 chamadas)
+```
+
 ### Modo reprodutível (sem rodar o modelo)
 
 Toda chamada ao LLM passa por um cache em disco (`cache/llm/`). Com `RADAR_LLM_MODE=cache_only`,

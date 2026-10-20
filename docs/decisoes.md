@@ -657,3 +657,39 @@ corpus da Fase 1 ou do dev, com os rótulos v1:
 - O plano de fases, as regras de conduta e o protocolo de checkpoint ficam em `docs/plano.md`,
   atualizado com as decisões até aqui. É a referência do plano, no lugar do contexto da
   conversa. Mudanças de plano exigem entrada neste log e atualização do plano.
+
+## Fase 3 — Baseline e LLM v1 no dev
+
+### D-038 · Classificador LLM v1: schema, prompt e papel com raciocínio
+- **Schema** (`src/classifier/llm.py`): os campos vêm nesta ordem.
+  - `justificativa` vem primeiro, até 300 caracteres: o modelo explica antes de decidir, o
+    que sem raciocínio funciona como um passo curto de reflexão;
+  - depois `causa` (8 classes v1.1), `gravidade` (baixa, media ou alta) e `confianca` (0 a 1).
+  - A área vem da causa.
+  - A ordem dos campos é parte do prompt e pode mudar na v2.
+- **Prompt** `prompts/classifier_v1.md`:
+  - regras gerais, classes com o que incluem e excluem, e critérios de gravidade, condensados
+    de `docs/taxonomia.md` v1.1;
+  - nenhum exemplo do gold set;
+  - cerca de 1.000 tokens de entrada no total, medidos entre 996 e 1.024 por item.
+- **Entrada:** nota, título e mensagem (D-029). Nada do pedido entra.
+- **Papel `classifier_think`** (`config.yaml`):
+  - `think: true` e `max_tokens: 4096`, porque o raciocínio gastou de 829 a 1.716 tokens nos 5
+    itens e 1024 truncaria;
+  - `num_ctx: 8192`, porque prompt, raciocínio e JSON não cabem em 4096;
+  - `temperature: 0`, como pede D-011. Não houve repetição nos 5 itens.
+- **Aquecimento:** antes de cada execução, uma chamada direta ao provedor carrega o modelo com
+  as opções do papel, fora do cache e do log, para que a carga não conte como custo por item
+  (D-013).
+- **Medição** em 5 itens do dev (sorteio com semente 42), `python -m src.classifier.run --limit 5`:
+
+  | | Sem raciocínio (`classifier`) | Com raciocínio (`classifier_think`) |
+  |---|---|---|
+  | s/item, mediana (mín–máx) | 1,17 (1,09–2,00) | 21,04 (15,69–33,37) |
+  | Tokens de saída, mediana (máx) | 62 (85) | 1.106 (1.716) |
+  | JSON válido | 5 de 5 | 5 de 5 |
+
+  O tempo sem raciocínio é cerca de 2,5 vezes o do benchmark de D-024 (0,47 s), por causa do
+  prompt real (cerca de 1.000 tokens) e da justificativa (cerca de 60 tokens).
+- O log `logs/llm_usage.jsonl` registra as 10 chamadas. O benchmark e os testes reais usam um
+  diretório temporário de propósito, e por isso o log estava vazio antes.
