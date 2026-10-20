@@ -1,4 +1,5 @@
-"""Relatório do gold set depois da rotulagem: distribuição de classes por split e classes raras.
+"""Relatório do gold set depois da rotulagem: classes por split, classes raras, causa
+secundária, notas livres e verificações de consistência dos rótulos.
 
 Uso: `python -m src.labeling.report`. Gera `reports/gold_set.md`. A distribuição "reponderada"
 estima a do universo de avaliações com comentário, pesando cada nota pela sua participação real
@@ -7,6 +8,7 @@ estima a do universo de avaliações com comentário, pesando cada nota pela sua
 
 from __future__ import annotations
 
+import re
 import sqlite3
 
 import pandas as pd
@@ -19,6 +21,10 @@ from src.taxonomy import AMBIGUOUS, AREA_BY_CAUSE, CAUSES
 
 FEW_DEV = 5  # classe com menos exemplos que isso no dev é sinalizada
 FEW_TEST = 8
+# Verificação grosseira dos campos auxiliares: termos no texto que deveriam, na maioria dos
+# casos, acompanhar a flag marcada. Não é rótulo; só aponta inconsistências para revisão.
+DELAY_TERMS = re.compile(r"atras|demor|n[aã]o (?:recebi|chegou)")
+REFUND_TERMS = re.compile(r"reembols|estorn|devolv|devolu|\btroc|dinheiro de volta")
 
 
 def score_weights(sample: pd.DataFrame, population_share: pd.Series) -> pd.Series:
@@ -57,6 +63,58 @@ def class_table(df: pd.DataFrame, weights: pd.Series) -> pd.DataFrame:
     return counts.reset_index().rename(columns={"causa": "classe"})
 
 
+def by_split(df: pd.DataFrame, keys: list[str]) -> pd.DataFrame:
+    """Contagem por `keys` com colunas dev, test e total, da maior para a menor."""
+    if df.empty:
+        return pd.DataFrame(columns=[*keys, "dev", "test", "total"])
+    t = df.groupby([*keys, "split"]).size().unstack(fill_value=0)
+    t = t.reindex(columns=["dev", "test"], fill_value=0)
+    t["total"] = t.sum(axis=1)
+    return t.sort_values("total", ascending=False, kind="stable").reset_index()
+
+
+def secondary_table(df: pd.DataFrame) -> pd.DataFrame:
+    """Pares causa principal → causa secundária."""
+    sec = df[df["causa_secundaria"].notna()]
+    return by_split(sec, ["causa", "causa_secundaria"])
+
+
+def notes_table(df: pd.DataFrame) -> pd.DataFrame:
+    """Notas livres (minúsculas, sem espaços nas pontas) por causa principal."""
+    notes = df.assign(nota=df["nota_livre"].fillna("").str.strip().str.lower())
+    return by_split(notes[notes["nota"] != ""], ["nota", "causa"])
+
+
+def consistency_table(df: pd.DataFrame, text: pd.Series) -> pd.DataFrame:
+    """Contagens de rótulos que contradizem a taxonomia ou o texto, por split."""
+    low = text.fillna("").str.lower()
+    no_delay = ~df["menciona_atraso"].astype(bool)
+    no_refund = ~df["pede_reembolso_troca"].astype(bool)
+    checks = {
+        "`atraso_entrega` com menciona_atraso = não": (df["causa"] == "atraso_entrega") & no_delay,
+        "texto com termo de atraso e menciona_atraso = não": low.str.contains(DELAY_TERMS)
+        & no_delay,
+        "texto com termo de reembolso/troca e pede_reembolso_troca = não": low.str.contains(
+            REFUND_TERMS
+        )
+        & no_refund,
+        "`elogio` como causa secundária (a classe exclui problema concreto)": (
+            df["causa_secundaria"] == "elogio"
+        ),
+    }
+    rows = []
+    for name, mask in checks.items():
+        rows.append(
+            {
+                "verificação": name,
+                "dev": int(mask[df["split"] == "dev"].sum()),
+                "test": int(mask[df["split"] == "test"].sum()),
+                "total": int(mask.sum()),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
 def main() -> None:
     cfg = load_config()
     gold_dir = resolve_path(cfg["paths"]["gold_dir"])
@@ -71,6 +129,14 @@ def main() -> None:
 
     rows = [lb.model_dump() for lb in labels.values()]
     df = sample.merge(pd.DataFrame(rows), on="review_id", how="inner")
+    texts = pd.read_sql(
+        "SELECT review_id, COALESCE(comment_title, '') || ' ' || COALESCE(comment_message, '') "
+        f"AS texto FROM reviews WHERE review_id IN ({','.join('?' * len(df))})",
+        con,
+        params=list(df["review_id"]),
+    ).set_index("review_id")["texto"]
+    con.close()
+    text = df["review_id"].map(texts)
     missing = len(sample) - len(df)
     table = class_table(df, weights)
     few = table[
@@ -95,6 +161,9 @@ def main() -> None:
         }
     )
     flags["% dos rotulados"] = (flags["itens"] / len(df)).map(pct)
+    secondary = secondary_table(df)
+    notes = notes_table(df)
+    n_notes = int((df["nota_livre"].fillna("").str.strip() != "").sum())
     weights_t = weights.reset_index()
     weights_t.columns = ["nota", "peso"]
 
@@ -124,6 +193,27 @@ def main() -> None:
         "## Campos auxiliares",
         "",
         md_table(flags),
+        "",
+        "## Causa secundária",
+        "",
+        f"{len(df[df['causa_secundaria'].notna()])} de {len(df)} itens têm causa secundária "
+        f"({pct(df['causa_secundaria'].notna().mean())}).",
+        "",
+        md_table(secondary),
+        "",
+        "## Notas livres",
+        "",
+        f"{n_notes} itens com nota livre, agrupadas pelo texto da nota (minúsculas).",
+        "",
+        md_table(notes),
+        "",
+        "## Verificações de consistência",
+        "",
+        "Contagens que apontam rótulos a revisar; não alteram nenhum rótulo. Os termos de texto "
+        f"são uma busca grosseira (`{DELAY_TERMS.pattern}` e `{REFUND_TERMS.pattern}`) e "
+        'podem ter falsos positivos (por exemplo, "não atrasou").',
+        "",
+        md_table(consistency_table(df, text)),
         "",
     ]
     path = resolve_path(cfg["paths"]["reports_dir"]) / "gold_set.md"

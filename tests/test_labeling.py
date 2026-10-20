@@ -190,3 +190,29 @@ def test_report_ambiguity_rate_overall_and_by_split() -> None:
         {"split": ["dev", "dev", "test", "test"], "causa": [AMBIGUOUS, "elogio", "elogio", "outro"]}
     )
     assert ambiguity_line(df) == "1 de 4 (25.0%); dev 1/2 (50.0%); test 0/2 (0.0%)"
+
+
+def test_report_secondary_notes_and_consistency() -> None:
+    from src.labeling.report import consistency_table, notes_table, secondary_table
+
+    df = pd.DataFrame(
+        {
+            "split": ["dev", "test", "test", "dev"],
+            "causa": ["atraso_entrega", "outro", "outro", "nao_recebido"],
+            "causa_secundaria": [None, None, "elogio", "problema_atendimento_ou_comunicacao"],
+            "menciona_atraso": [False, False, False, True],
+            "pede_reembolso_troca": [False, False, False, False],
+            "nota_livre": ["", " Qualidade ruim", "qualidade ruim", ""],
+        }
+    )
+    text = pd.Series(["está demorando", "não atrasou", "quero o estorno", "não chegou"])
+    sec = secondary_table(df).set_index("causa_secundaria")
+    assert sec["total"].to_dict() == {"elogio": 1, "problema_atendimento_ou_comunicacao": 1}
+    notes = notes_table(df)
+    assert notes[["nota", "causa", "dev", "test", "total"]].values.tolist() == [
+        ["qualidade ruim", "outro", 0, 2, 2]
+    ]
+    c = consistency_table(df, text).set_index("verificação")["total"].tolist()
+    # atraso sem flag; termo de atraso sem flag (inclui o falso positivo "não atrasou");
+    # termo de reembolso sem flag; elogio como secundária
+    assert c == [1, 2, 1, 1]
