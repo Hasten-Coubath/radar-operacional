@@ -1,4 +1,5 @@
-"""Roda o agente investigador nos alertas do Radar e grava `reports/agente.md` (Fase 8).
+"""Roda o agente investigador nos alertas do Radar e grava `reports/agente.md` e
+`reports/briefings.json` (Fase 8; o JSON alimenta o painel).
 
 Uso: `python -m src.agent.run --top 5` (estimativa) e `--confirm` (OK do usuário, D-013).
 Os alertas vêm de `reports/alertas_avaliacao.csv` (backtest de 2018): os de maior escore do
@@ -11,8 +12,11 @@ quatro camadas de somente leitura.
 from __future__ import annotations
 
 import argparse
+import json
 import tempfile
+from dataclasses import asdict
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 
@@ -35,6 +39,33 @@ def pick_alerts(path: Path, top: int) -> list[Alert]:
         Alert(x.segment_type, x.segment_value, x.week, x.familia, float(x.score))
         for x in r.itertuples(index=False)
     ]
+
+
+def to_json(invs: list[Investigation]) -> list[dict[str, Any]]:
+    """Briefings com a verificação de cada afirmação (entrada do painel, `src.app.data`)."""
+    out = []
+    for inv in invs:
+        b = inv.briefing
+        claims = b.afirmacoes if b else []
+        out.append(
+            {
+                "alerta": asdict(inv.alert),
+                "resumo": b.resumo if b else "",
+                "causa_provavel": b.causa_provavel if b else "",
+                "afirmacoes": [
+                    {
+                        "texto": c.texto,
+                        "valor": chk.valor_citado,
+                        "valor_recalculado": chk.valor_recalculado,
+                        "status": chk.status,
+                        "query_sql": c.query_sql,
+                    }
+                    for c, chk in zip(claims, inv.checks, strict=True)
+                ],
+                "numeros_sem_afirmacao": inv.unsupported,
+            }
+        )
+    return out
 
 
 def report(invs: list[Investigation]) -> list[str]:
@@ -127,6 +158,9 @@ def main() -> None:
                 invs.append(investigate(client, sql, a))
             finally:
                 sql.close()
+    (reports / "briefings.json").write_text(
+        json.dumps(to_json(invs), ensure_ascii=False, indent=2), encoding="utf-8"
+    )
     path = reports / "agente.md"
     path.write_text("\n".join(report(invs)), encoding="utf-8", newline="\n")
     print(f"Relatório gravado em {path}")

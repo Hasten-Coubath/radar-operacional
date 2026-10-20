@@ -129,3 +129,20 @@ def test_verify_requires_single_value(sql: ReadOnlySQL) -> None:
     )
     checks, _ = verify(b, sql)
     assert checks[0].status == "erro" and "único valor" in checks[0].detalhe
+
+
+def test_briefings_json_for_panel(tmp_path: Path, sql: ReadOnlySQL) -> None:
+    from src.agent.run import to_json
+
+    good = {
+        "texto": "30 notas 1",
+        "valor": 30,
+        "query_sql": "SELECT COUNT(*) FROM reviews WHERE review_score = 1",
+    }
+    prov = ScriptedProvider([[{"type": "text", "text": briefing_json([good])}]])
+    inv = investigate(client(tmp_path, prov), sql, Alert("estado", "SP", "2018-04-02"), system="s")
+    (out,) = to_json([inv])
+    assert out["alerta"]["week"] == "2018-04-02"
+    assert out["afirmacoes"][0]["status"] == "verificada"
+    assert out["afirmacoes"][0]["valor_recalculado"] == 30
+    json.dumps(out)  # serializável
