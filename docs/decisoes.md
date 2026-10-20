@@ -759,3 +759,54 @@ corpus da Fase 1 ou do dev, com os rótulos v1:
 - **Fase 4:** o prompt não é ajustado para imitar esses rótulos questionáveis. Se a taxonomia
   precisar de redação mais clara, isso é registrado como melhoria para uma versão futura
   (`docs/erros.md`, "Melhorias de redação") e não é aplicado à v1.1.
+
+## Fase 4 — Análise de erros e LLM v2 (decisões do usuário em 2026-10-20, antes de rodar a v2)
+
+### D-042 · Configuração principal: LLM sem raciocínio
+- **Decidido pelo usuário** depois da Fase 3: `qwen3:4b` sem raciocínio (papel `classifier`).
+  - Com raciocínio, empatou dentro do ruído: macro-F1 de 0,823 contra 0,846, com intervalos de
+    confiança praticamente iguais.
+  - Custa cerca de 20 vezes mais tempo: 28 s contra 1,4 s por item.
+- O modo com raciocínio fica como comparação: roda no test depois do lote da Fase 6, para não
+  disputar a GPU.
+
+### D-043 · Denominador do Radar (fixado antes da Fase 7)
+- **Decidido pelo usuário:** a taxa da causa *X* no segmento *s* e na semana *t* é
+  **comentários classificados com a causa *X* / total de avaliações de *s* respondidas em *t***.
+  - O total inclui avaliações com e sem comentário e os `nao_classificado` (D-039).
+  - A semana é a da resposta (`answered_week`, D-019), e o segmento vem da view
+    `review_segments`.
+- **Leitura:** "avaliações com causa *X* a cada 100 avaliações". A taxa capta tanto o aumento
+  de reclamações quanto a mudança de causa, e usa a mesma base de B1 (nota média) e B2 (fração
+  de notas ≤ 2), o que torna a comparação justa.
+- **Se a antecedência ficar parecida com a de B2,** o argumento do projeto passa a ser o
+  diagnóstico de causa, como já previsto em D-026.
+- Complementa D-026 ("Métodos comparados", Radar). Não muda a definição de incidente nem os
+  períodos.
+
+### D-044 · Protocolo da Fase 4, fixado antes de rodar a v2
+- **Uma única iteração v1 → v2** do prompt sem raciocínio, no dev (100 chamadas, OK do
+  usuário).
+  - A v2 só ataca as categorias 2 a 5 de `docs/erros.md`.
+  - Não imita os 4 rótulos questionáveis (D-041) e não muda nenhuma definição de classe da
+    v1.1.
+- **Regra de aceite (a priori):** a v2 substitui a v1 se, e só se, valerem as três condições
+  no dev:
+  1. macro-F1 principal (rótulos originais, sem reponderação) da v2 ≥ 0,846 (v1);
+  2. nenhum acerto perdido em classe rara: todo item com gold `produto_diferente_do_anunciado`,
+     `problema_atendimento_ou_comunicacao` ou `outro` que a v1 acerta, a v2 também acerta;
+  3. falhas de schema da v2 ≤ as da v1 (0).
+
+  Se qualquer condição falhar, a v1 continua. Nenhuma outra iteração é feita.
+- **Relatório item a item:** acertos ganhos e perdidos da v2 em relação à v1
+  (`reports/fase4_dev.md`).
+- **Limiar de confiança para revisão humana:** calibrado no dev, com as confianças salvas da
+  configuração escolhida, sem GPU.
+  - **Curva:** para cada limiar *c*, a % de itens com confiança < *c* enviada para revisão e
+    a acurácia do restante.
+  - **Regra de escolha (a priori):**
+    - o limiar que maximiza a acurácia do restante, enviando no máximo 15% dos itens;
+    - em empate, o que envia menos;
+    - se nenhum limiar melhorar a acurácia do restante em pelo menos 2 p.p. sobre não enviar
+      nada, a proposta é **não usar limiar**, porque a confiança não é informativa.
+  - O limiar escolhido no dev é aplicado sem ajuste no test (Fase 5).
