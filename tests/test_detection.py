@@ -124,6 +124,54 @@ def test_matching_false_alarms_and_calibration() -> None:
     assert curve.set_index("theta").loc[5.0, "recall_A"] == 1.0  # só o alerta da semana 21
 
 
+def test_equal_fa_table_uses_smallest_theta_within_level() -> None:
+    from src.detection.backtest import equal_fa_table
+
+    curve = pd.DataFrame(
+        {
+            "theta": [1.0, 2.0, 3.0, 1.0, 2.0, 3.0],
+            "fa_por_semana": [2.0, 0.6, 0.2, 0.9, 0.4, 0.1],
+            "recall_A": [1.0, 0.75, 0.5, 1.0, 0.5, 0.25],
+            "n_A": 4,
+            "recall_B": float("nan"),
+            "n_B": 0,
+            "método": ["Radar"] * 3 + ["B1"] * 3,
+        }
+    )
+    t = equal_fa_table(curve, levels=(0.5, 1.0)).set_index(["nível (FA/sem ≤)", "método"])
+    assert t.loc[(0.5, "Radar"), "θ"] == 3.0 and t.loc[(0.5, "Radar"), "recall A"] == "2/4"
+    assert t.loc[(0.5, "B1"), "θ"] == 2.0 and t.loc[(0.5, "B1"), "recall A"] == "2/4"
+    assert t.loc[(1.0, "Radar"), "θ"] == 2.0 and t.loc[(1.0, "B1"), "θ"] == 1.0
+    assert t.loc[(1.0, "B1"), "recall B"] == "0/0"
+    none = equal_fa_table(curve, levels=(0.05,))
+    assert (none["θ"] == "—").all()
+
+
+def test_incident_table_lead_sign() -> None:
+    from src.detection.backtest import incident_table
+
+    w = WEEKS
+    base = pd.DataFrame(
+        {
+            "segment_type": "estado",
+            "segment_value": ["SP", "RJ"],
+            "tipo": "A",
+            "start": [w[10], w[20]],
+            "end": [w[12], w[22]],
+        }
+    )
+    det = {
+        "Radar": base.assign(detected=[w[8], pd.NaT], familia=["entrega", None]),
+        "B1": base.assign(detected=[w[11], w[21]]),
+        "B2": base.assign(detected=[w[8], pd.NaT]),
+    }
+    t = incident_table(det).set_index("segment_value")
+    assert t.loc["SP", "antecedência vs B1 (sem)"] == "+3"  # Radar 3 semanas antes
+    assert t.loc["SP", "antecedência vs B2 (sem)"] == "0"
+    assert t.loc["RJ", "Radar"] == "—" and t.loc["RJ", "antecedência vs B1 (sem)"] == ""
+    assert t.loc["SP", "família (Radar)"] == "entrega"
+
+
 def test_backtest_refuses_incomplete_batch() -> None:
     import sqlite3
 

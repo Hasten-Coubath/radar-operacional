@@ -52,6 +52,7 @@ N_MIN_A, N_MIN_B = 30, 20  # D-026
 METHODS = ("Radar", "B1", "B2", "B3")
 CASE_SELLER = "5dceca12"  # D-026: caso a examinar na categoria do vendedor
 THETA_FILE = "backtest_calibracao.json"
+FA_LEVELS = (0.25, 0.5, 0.75, 1.0)  # níveis da comparação em FA/semana iguais (descritiva)
 
 
 def load_predictions(path: Path) -> pd.DataFrame | None:
@@ -158,15 +159,78 @@ def lead_table(detected: dict[str, pd.DataFrame]) -> pd.DataFrame:
                     "incidentes": len(sub),
                     "ambos detectam": len(both),
                     "só Radar": int((sub["detected_r"].notna() & sub["detected_o"].isna()).sum()),
-                    f"só {other}": int(
-                        (sub["detected_r"].isna() & sub["detected_o"].notna()).sum()
-                    ),
+                    "só o outro": int((sub["detected_r"].isna() & sub["detected_o"].notna()).sum()),
                     "antecedência mediana (sem)": float(lead.median())
                     if len(lead)
                     else float("nan"),
                     "antecedência média (sem)": float(lead.mean()) if len(lead) else float("nan"),
                 }
             )
+    return pd.DataFrame(rows)
+
+
+def incident_table(detected: dict[str, pd.DataFrame]) -> pd.DataFrame:
+    """Incidente por incidente: semana de detecção de cada método, família do alerta do Radar e
+    antecedência do Radar sobre B1 e B2 (semanas; positivo = Radar antes)."""
+    r = detected.get("Radar")
+    if r is None:
+        return pd.DataFrame()
+    on = [*KEYS, "tipo", "start"]
+    out = r[[*on, "end", "detected", "familia"]].rename(
+        columns={"detected": "Radar", "familia": "família (Radar)"}
+    )
+    for m in ("B1", "B2", "B3"):
+        if m in detected:
+            d = detected[m][[*on, "detected"]].rename(columns={"detected": m})
+            out = out.merge(d, on=on, how="left")
+    for m in ("B1", "B2"):
+        if m in out:
+            lead = (out[m] - out["Radar"]) / WEEK
+            out[f"antecedência vs {m} (sem)"] = [
+                "" if pd.isna(x) else (f"{x:+.0f}" if x else "0") for x in lead
+            ]
+    out = out.sort_values(["start", *KEYS]).reset_index(drop=True)
+    for c in ("start", "end", "Radar", "B1", "B2", "B3"):
+        if c in out:
+            out[c] = [("—" if pd.isna(x) else f"{x:%Y-%m-%d}") for x in out[c]]
+    out["família (Radar)"] = out["família (Radar)"].fillna("")
+    return out
+
+
+def curve_wide(curve: pd.DataFrame) -> pd.DataFrame:
+    """Curva completa na grade de θ: FA/semana e recall de cada método, lado a lado."""
+    parts = []
+    for m, c in curve.groupby("método", sort=False):
+        parts.append(
+            c.set_index("theta")[["fa_por_semana", "recall_A", "recall_B"]].rename(
+                columns={
+                    "fa_por_semana": f"{m} FA/sem",
+                    "recall_A": f"{m} recall A",
+                    "recall_B": f"{m} recall B",
+                }
+            )
+        )
+    return pd.concat(parts, axis=1).reset_index().rename(columns={"theta": "θ"})
+
+
+def equal_fa_table(curve: pd.DataFrame, levels: tuple[float, ...] = FA_LEVELS) -> pd.DataFrame:
+    """Recall em níveis iguais de FA/semana. Para cada método e nível, o menor θ da grade com
+    FA/semana ≤ nível (a regra da calibração, D-048: o degrau que não ultrapassa o nível)."""
+    rows: list[dict[str, Any]] = []
+    for level in levels:
+        for m, c in curve.groupby("método", sort=False):
+            ok = c[c["fa_por_semana"] <= level]
+            row: dict[str, Any] = {"nível (FA/sem ≤)": level, "método": m}
+            if ok.empty:
+                rows.append(row | {"θ": "—"})
+                continue
+            best = ok.loc[ok["theta"].idxmin()]
+            row |= {"θ": float(best["theta"]), "FA/sem": float(best["fa_por_semana"])}
+            for kind in ("A", "B"):
+                n = int(best[f"n_{kind}"])
+                hit = 0 if n == 0 else round(float(best[f"recall_{kind}"]) * n)
+                row[f"recall {kind}"] = f"{hit}/{n}"
+            rows.append(row)
     return pd.DataFrame(rows)
 
 
@@ -339,7 +403,7 @@ def run(period: str) -> Path:
     export_alerts(scores, thetas, pweeks, reports / f"alertas_{period}.csv")
     period_inc = inc_all[(inc_all["start"] >= pweeks.min()) & (inc_all["start"] <= pweeks.max())]
     curve_t = pd.concat(curves, ignore_index=True)
-    curve_t = curve_t[curve_t["theta"].isin([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 8.0])]
+    curve_t.to_csv(reports / f"curva_{period}.csv", index=False, lineterminator="\n")
     title = "calibração (2017)" if period == "calibracao" else "avaliação (2018)"
     out = [
         f"# Backtest: {title}",
@@ -364,13 +428,36 @@ def run(period: str) -> Path:
         "",
         md_table(onset_table(detected)),
         "",
+        "### Incidente por incidente",
+        "",
+        "Semana da primeira detecção de cada método (— = não detectou). Antecedência = detecção "
+        "do outro método − detecção do Radar, em semanas (positivo = Radar antes).",
+        "",
+        md_table(incident_table(detected)),
+        "",
         "## Diagnóstico de causa do Radar",
         "",
         md_table(diagnosis_table(detected)),
         "",
-        "## Curva recall × falsos alarmes (alguns θ)",
+        "## Recall em níveis iguais de falsos alarmes",
         "",
-        md_table(curve_t),
+        "Comparação descritiva: o resultado principal é o do θ calibrado, acima. Para cada "
+        "método e nível, o menor θ da grade cuja curva **deste período** fica em FA/semana ≤ "
+        "nível (o degrau que não ultrapassa o nível, sem interpolar)"
+        + (
+            "."
+            if period == "calibracao"
+            else "; esse θ é escolhido olhando 2018, por isso não é um resultado de previsão."
+        ),
+        "",
+        md_table(equal_fa_table(curve_t)),
+        "",
+        "## Curva recall × falsos alarmes (grade completa)",
+        "",
+        f"Também em `reports/curva_{period}.csv` (com os falsos alarmes absolutos e o nº de "
+        "incidentes).",
+        "",
+        md_table(curve_wide(curve_t)),
         "",
         "## Incidentes do período",
         "",
