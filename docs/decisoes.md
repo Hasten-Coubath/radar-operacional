@@ -874,3 +874,22 @@ não ambíguos, rodados uma única vez.
   - o número a citar é o do test, 0,657, não o do dev;
   - a causa `qualidade_insatisfatoria` não é confiável para o detector;
   - a melhoria da taxonomia já está registrada para uma versão futura (`docs/erros.md`).
+
+### D-047 · Família "produto" como unidade de detecção e diagnóstico na Fase 7
+- **Decidido pelo usuário (2026-10-20), antes de qualquer código da Fase 7.**
+  - `qualidade_insatisfatoria`, `produto_defeituoso_ou_danificado` e
+    `produto_diferente_do_anunciado` formam a família **produto**.
+  - Na Fase 7, o Radar detecta e diagnostica por família, não por essas três causas
+    separadas.
+- **A decisão foi motivada pelos resultados do test set (D-046).**
+  - No test, `qualidade_insatisfatoria` teve recall de 0,17, e os itens foram para `defeito`
+    e `diferente`.
+  - Fica declarado que o test influenciou uma escolha de desenho posterior. A escolha não
+    altera nenhum número da Fase 5.
+- **As métricas do classificador no test permanecem exatamente como reportadas** em
+  `reports/fase5_test.md`. Um F1 por família só pode aparecer como observação pós-teste
+  identificada, nunca como métrica principal.
+- As outras causas continuam como unidades próprias: `problema_entrega`,
+  `pedido_incompleto_ou_errado`, `problema_atendimento_ou_comunicacao` e `outro`. `elogio`
+  não entra em sinal de problema.
+- Não muda a definição de incidente, os períodos nem o denominador (D-026, D-043).

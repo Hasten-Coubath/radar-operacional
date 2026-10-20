@@ -36,7 +36,19 @@ _(diagrama Mermaid na Fase 10)_
 
 ## Resultados
 
-_(Fases 5, 7 e 8)_
+### Classificador de causa (Fase 5, test set, avaliação única)
+
+| | macro-F1 [IC 95%] | acurácia | s/item |
+|---|---|---|---|
+| **LLM local `qwen3:4b`, sem raciocínio** | **0,657** [0,518; 0,754] | 0,810 | 1,7 s |
+| baseline TF-IDF + regressão logística | 0,422 [0,336; 0,492] | 0,708 | < 1 ms |
+
+Fonte: `reports/fase5_test.md` (137 itens não ambíguos, 8 classes). No dev, o LLM tinha 0,846;
+a queda está explicada nas Limitações. Medi se o modo com raciocínio valia a pena: no dev ele
+empatou dentro do ruído (macro-F1 0,823 contra 0,846) e custou cerca de 20 vezes mais tempo
+(`reports/fase3_dev.md`).
+
+_(Detector e agente: Fases 7 e 8.)_
 
 ## Erros encontrados e correções
 
@@ -50,9 +62,15 @@ _(Lista parcial; completada na Fase 10.)_
   `nao_classificado`, não `elogio`. Estimativa no dev: perde-se cerca de 12% do volume de
   problemas e até cerca de 84% das reclamações de atendimento, que aparecem em notas altas
   (estimativa incerta: 5 itens no gold set). O Radar vê mal os problemas de atendimento.
-- **Classificador no test set** (Fase 5, `reports/fase5_test.md`): macro-F1 de 0,657, IC
-  [0,518; 0,754], contra 0,846 no dev. `qualidade_insatisfatoria` tem recall de 0,17, e esses
-  itens vão para `defeito` ou `diferente`, que são da mesma área (`vendedor`).
+- **Queda do classificador do dev para o test** (macro-F1 0,846 → 0,657; `reports/fase5_test.md`).
+  - Quase toda a queda está em `qualidade_insatisfatoria`, com recall de 0,17 no test: os
+    itens vão para `defeito` ou `diferente`.
+  - A causa provável é a taxonomia: a classe nasceu do remapeamento mecânico de uma nota da
+    rotulagem (D-034) e conflita com a definição escrita (D-041).
+  - Some-se a isso a variância de um dev de 96 itens.
+  - Por isso, o detector trata as três classes de produto como uma família só (D-047). Elas são
+    todas da área `vendedor`, em que o acerto de área no test é de 45 em 46 (observação
+    pós-teste).
 - **Seleção do dataset:** só há pedidos que receberam pesquisa até 31/08/2018 (D-020).
 - **Área responsável por mapeamento fixo** (D-027, D-034): avaria no transporte cai em
   `vendedor`, e cancelamento por falta de estoque cai em `logistica`.
