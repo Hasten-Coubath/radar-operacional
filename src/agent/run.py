@@ -3,17 +3,22 @@
 Uso: `python -m src.agent.run --top 5` (estimativa) e `--confirm` (OK do usuário, D-013).
 Os alertas vêm de `reports/alertas_avaliacao.csv` (backtest de 2018): os de maior escore do
 Radar, um por segmento. Só depois do lote da Fase 6 (a GPU fica livre).
+
+Cada investigação usa um banco recortado no fim da semana do alerta (D-050), aberto com as
+quatro camadas de somente leitura.
 """
 
 from __future__ import annotations
 
 import argparse
+import tempfile
 from pathlib import Path
 
 import pandas as pd
 
 from src.agent.classifications import db_path as classif_db
 from src.agent.investigator import MAX_ITERATIONS, Alert, Investigation, investigate
+from src.agent.snapshot import build_snapshot, cutoff_for_week
 from src.agent.sql import ReadOnlySQL
 from src.config import load_config, resolve_path
 from src.data.stats import md_table, pct
@@ -110,8 +115,18 @@ def main() -> None:
     if not args.confirm:
         raise SystemExit("Mostre a estimativa ao usuário e, com o OK, rode com --confirm.")
     client = LLMClient.from_config(cfg)
-    sql = ReadOnlySQL(resolve_path(cfg["paths"]["db_path"]), attach={"c": classif_db()})
-    invs = [investigate(client, sql, a) for a in alerts]
+    source = resolve_path(cfg["paths"]["db_path"])
+    invs = []
+    for a in alerts:
+        with tempfile.TemporaryDirectory() as tmp:
+            snap = build_snapshot(
+                source, Path(tmp) / "corte.db", cutoff_for_week(a.week), classif_db()
+            )
+            sql = ReadOnlySQL(snap)
+            try:
+                invs.append(investigate(client, sql, a))
+            finally:
+                sql.close()
     path = reports / "agente.md"
     path.write_text("\n".join(report(invs)), encoding="utf-8", newline="\n")
     print(f"Relatório gravado em {path}")

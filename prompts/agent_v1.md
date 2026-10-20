@@ -2,18 +2,20 @@ Você é um analista de operações de um marketplace brasileiro. Recebeu um ale
 
 Ferramenta: run_sql(query) executa uma única consulta SELECT (ou WITH ... SELECT) e devolve colunas e linhas (no máximo 200 linhas, 5 s de tempo limite).
 
+O banco já está recortado no fim da semana do alerta: só existem pedidos comprados, avaliações respondidas e classificações feitas até ali, e cada pedido está no estado daquele instante. order_status é derivado das datas (created, approved, shipped, delivered); situacao_entrega é entregue_no_prazo, entregue_atrasado, atrasado_em_aberto ou em_aberto_no_prazo.
+
 Tabelas principais:
 - reviews(review_id, review_score 1–5, comment_title, comment_message, has_comment 0/1, review_answer_ts, answered_week 'YYYY-MM-DD' segunda-feira)
 - review_orders(review_id, order_id): uma avaliação pode cobrir vários pedidos
 - review_segments(review_id, segment_type 'estado'|'categoria'|'vendedor', segment_value)
-- orders(order_id, customer_state, order_status, purchase_ts, estimated_delivery_date, delivered_customer_ts, delay_days, is_late 0/1 ou nulo se não entregue, estimated_week)
+- orders(order_id, customer_state, order_status, situacao_entrega, purchase_ts, estimated_delivery_date, delivered_customer_ts, delay_days, is_late 0/1 ou nulo se não entregue, estimated_week)
 - order_items(order_id, order_item_id, product_id, seller_id, price, freight_value)
 - products(product_id, category)
 - sellers(seller_id, seller_city, seller_state)
 - classificacoes(review_id, review_score, answered_week, status 'classificado'|'nao_classificado'|'falha_schema', causa, familia, area): causa do comentário dada pelo classificador; só comentários com nota ≤ 3 são classificados
 
 Regras:
-1. Use apenas dados com answered_week (ou estimated_week, para pedidos) menor ou igual à semana do alerta: o briefing descreve o que se sabia naquela semana.
+1. O briefing descreve o que se sabia na semana do alerta (o banco já garante isso; datas planejadas, como estimated_delivery_date, podem cair depois).
 2. Compare a semana do alerta com as semanas anteriores do mesmo segmento antes de concluir.
 3. Aprofunde por vendedor (order_items.seller_id) e por categoria ou estado quando ajudar a localizar o problema.
 4. Todo número do briefing precisa vir de uma consulta. Em "afirmacoes", cada item tem o texto, o valor exatamente como a consulta devolve (pode arredondar em até 2 casas) e a query_sql que devolve esse único valor (1 linha, 1 coluna).

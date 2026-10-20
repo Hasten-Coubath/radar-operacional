@@ -967,10 +967,51 @@ mediana das 26 semanas anteriores com volume ≥ *n_min*, exigindo pelo menos 8.
 - **Loop** (`src/agent/investigator.py`): até 8 iterações de chamada de ferramenta, depois um
   pedido final de briefing em JSON (`Briefing`, com até 2 tentativas, D-006) e a verificação.
   Sem framework de agentes.
-- **Limitação, a resolver antes das chamadas reais:** o agente vê o banco inteiro. A regra de
+- **Limitação (resolvida em D-050):** o agente vê o banco inteiro. A regra de
   usar só dados até a semana do alerta está no prompt (`prompts/agent_v1.md`), não é imposta.
   - Numa investigação de um alerta antigo do backtest, o agente pode olhar o futuro.
   - Opção de correção: um banco recortado na semana do alerta, gerado para cada
     investigação. Fica como decisão do usuário.
 - **Chamadas reais ao Ollama:** só depois do lote da Fase 6, que ocupa a GPU. Até lá, só testes
   com provedor roteirizado.
+
+### D-050 · Banco recortado por investigação (resolve a limitação de D-049)
+- **Decidido pelo usuário.** Cada investigação usa um banco gerado no corte, que é o fim da
+  semana do alerta: a segunda-feira seguinte, 00:00, exclusive (`src/agent/snapshot.py`).
+- **O agente só vê esse banco**, aberto com as quatro camadas de somente leitura de D-049.
+- **A regra de usar só o que se sabia está imposta pelos dados.** No prompt, ela fica só como
+  contexto.
+
+**Estado point-in-time, não só filtro de linhas:**
+- **Pedidos:** só os comprados antes do corte.
+  - Aprovação, envio e entrega posteriores ao corte viram nulo.
+  - `delay_days`, `is_late`, `delivery_days` e `delivered_week` só existem se a entrega foi
+    antes do corte.
+- **`order_status` final é substituído por um status derivado das datas no corte:**
+  `created`, `approved`, `shipped` ou `delivered`.
+  - Não se sabe quando o status mudou (D-025).
+  - Cancelamentos e indisponibilidades não aparecem no banco recortado, e um pedido cancelado
+    antes do corte surge como `approved` ou `created`. É uma limitação aceita: a data do
+    cancelamento não existe no dataset.
+- **`situacao_entrega`:** coluna nova com a lógica de `src/data/point_in_time.py`
+  (`delay_status_as_of`).
+- **Avaliações e classificações:** só as com `review_answer_ts` antes do corte (D-019). O
+  vínculo `review_orders` e a view `review_segments` seguem o mesmo recorte.
+
+**Exceção declarada ao requisito "nenhuma data depois do corte".**
+- Ficam as datas planejadas, conhecidas na compra, mesmo que caiam depois do corte:
+  `estimated_delivery_date`, `estimated_week` e `shipping_limit_ts`.
+- Anulá-las esconderia o que se sabia na semana do alerta, inclusive o que define "atrasado em
+  aberto".
+- O teste verifica todas as outras colunas de data de todas as tabelas, e lista essas três
+  como exceções explícitas.
+
+**Testes** (`tests/test_snapshot.py`):
+1. Nenhuma data de evento depois do corte, em nenhuma tabela.
+2. Um pedido comprado antes e entregue depois do corte aparece como não entregue: entrega nula,
+   `approved` e `atrasado_em_aberto`.
+3. Consultas do agente sobre o período posterior ao corte devolvem vazio, em avaliações,
+   classificações e pedidos. Uma resposta às 23:59 do domingo da semana do alerta entra.
+
+O verificador reexecuta as consultas no mesmo banco recortado: um número só é verificado se
+fosse calculável na semana do alerta.
