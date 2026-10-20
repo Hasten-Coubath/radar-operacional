@@ -12,10 +12,10 @@ gestor de operações: **tem algo quebrando agora, onde, desde quando e qual o i
 ## Visão da solução
 
 1. **Classificador de causa.** Cada avaliação com comentário vira um JSON validado (causa,
-   gravidade, área responsável, atraso, reembolso/troca, confiança, justificativa), avaliado
-   contra um gold set rotulado manualmente.
-2. **Detector de anomalias com backtest.** Causas agregadas por semana e segmento (estado,
-   categoria, vendedor); o backtest mede com quantas semanas de antecedência o Radar detecta
+   gravidade, confiança, justificativa; a área responsável vem da causa), avaliado contra um
+   gold set rotulado manualmente. Taxonomia v1.1 em [docs/taxonomia.md](docs/taxonomia.md).
+2. **Detector de anomalias com backtest.** Causas agregadas por semana e segmento (estado e
+   categoria; vendedor é aprofundamento do agente); o backtest mede com quantas semanas de antecedência o Radar detecta
    incidentes em relação à queda da nota média, e quantos falsos alarmes gera.
 3. **Agente investigador com verificação.** Diante de um alerta, um agente com acesso
    somente leitura ao banco investiga via SQL e escreve um briefing; cada número do briefing é
@@ -26,9 +26,8 @@ gestor de operações: **tem algo quebrando agora, onde, desde quando e qual o i
 Todo o uso de LLM roda localmente com o [Ollama](https://ollama.com) e o modelo `qwen3:4b`
 (alvo: RTX 4050 com 6 GB de VRAM). O custo em dinheiro é zero e as avaliações não saem da
 máquina. Em troca, o modelo é menor que os de API e cada chamada custa segundos de GPU. Por isso
-a métrica de custo nos relatórios é o **tempo de processamento**, e a classificação do dataset
-inteiro usa uma estratégia híbrida (baseline em tudo, LLM só onde o baseline tem baixa
-confiança). O provedor da Anthropic continua disponível como opção paga. Detalhes e trade-offs
+a métrica de custo nos relatórios é o **tempo de processamento**, e a estratégia de
+classificação do dataset inteiro é escolhida na Fase 6 com o tempo medido. O provedor da Anthropic continua disponível como opção paga. Detalhes e trade-offs
 em [docs/decisoes.md](docs/decisoes.md) (D-010 a D-015).
 
 ## Arquitetura
@@ -83,8 +82,11 @@ Gold set (rotulagem manual, sem LLM):
 ```bash
 python -m src.labeling.gold          # sorteia amostra e divisão dev/test (uma vez só)
 streamlit run src/labeling/app.py    # ferramenta de rotulagem (http://127.0.0.1:8501)
+python -m src.labeling.migrate --force  # rótulos v1 -> taxonomia v1.1 (regras mecânicas)
 python -m src.labeling.report        # reports/gold_set.md: distribuição dos rótulos
 ```
+
+Plano de fases e regras do projeto: [docs/plano.md](docs/plano.md).
 
 ### Modo reprodutível (sem rodar o modelo)
 
@@ -108,11 +110,11 @@ data/raw/            CSVs da Olist (não versionados)
 data/processed/      dados limpos e banco SQLite (não versionados)
 data/gold/           gold set rotulado manualmente
 data/samples/        IDs de amostras auxiliares (sem texto)
-docs/                taxonomia, decisões, análise de erros
+docs/                plano, taxonomia, decisões, análise de erros
 prompts/             prompts versionados
 reports/             relatórios de avaliação
 src/data/            carga, limpeza, sinal de atraso (inclusive point-in-time), banco, estatísticas
-src/labeling/        amostra do gold set, ferramenta de rotulagem, relatório
+src/labeling/        amostra do gold set, ferramenta de rotulagem, migração v1.1, relatório
 src/taxonomy.py      classes e mapeamento causa -> área
 src/llm/             cliente de LLM (Ollama/Anthropic), cache em disco, uso
 tests/               pytest

@@ -65,6 +65,8 @@ Cada entrada registra o que foi decidido, por quê e o que foi deixado de lado.
   `python -m src.llm` soma o custo efetivamente gasto.
 
 ### D-009 · Cache e logs fora do git (pendente de decisão)
+> **Resolvido em D-035:** cache e logs não são versionados; as previsões por `review_id`, sem
+> texto, são.
 > Atualizado em D-013: sem custo de API, o argumento a favor de versionar o cache muda.
 
 - Por ora `cache/` e `logs/` estão no `.gitignore`. Versionar o cache permitiria que qualquer
@@ -148,6 +150,8 @@ Cada entrada registra o que foi decidido, por quê e o que foi deixado de lado.
   não responder ou se o modelo não estiver baixado.
 
 ### D-015 · Fase 6: estratégia híbrida como plano padrão
+> Alternativas a avaliar na Fase 6: classificar tudo com o LLM (D-032) e classificar só
+> notas ≤ 3 (cobertura por classe em `reports/gold_set.md`).
 - Classificar o dataset inteiro com um modelo local leva horas. O plano padrão da Fase 6 é
   híbrido: o baseline (Fase 3) classifica tudo, e o LLM só entra onde o baseline tiver baixa
   confiança. O limiar de confiança e a fração enviada ao LLM são definidos no dev set, nunca no
@@ -334,6 +338,11 @@ Números citados abaixo vêm de `reports/fase1_dados.md` (`python -m src.data.st
   - Aprovado e aplicado (D-030).
 
 ### D-026 · Definição de incidente e linhas de base, fixadas antes da Fase 7
+> **Nomes de classe atualizados por D-034 (taxonomia v1.1).** No diagnóstico (item 1 de
+> "Se a antecedência for pequena"), a causa esperada no tipo A passa a ser
+> `problema_entrega`, que reúne `atraso_entrega` e `nao_recebido`; no tipo B, as demais
+> causas, incluindo `qualidade_insatisfatoria`. Definição de incidente, parâmetros, períodos e
+> métricas não mudam. Nenhum detector existia na data da mudança.
 Escrita antes de existir qualquer detector. Qualquer mudança posterior exige nova entrada
 com o motivo e os resultados antes e depois da mudança.
 
@@ -458,6 +467,7 @@ projeto avalia e reporta como valor principal:
    - Se não houver alerta na categoria, isso é reportado como limitação de cobertura.
 
 ### D-027 · Área responsável: mapeamento fixo causa → área
+> **Revisado em D-034:** tabela da taxonomia v1.1 lá. A tabela abaixo é a da v1.
 A área não é rotulada nem prevista; é derivada da causa (`src/taxonomy.py`, `AREA_BY_CAUSE`).
 
 | Causa | Área |
@@ -477,6 +487,8 @@ A área não é rotulada nem prevista; é derivada da causa (`src/taxonomy.py`, 
 ## Fase 2 — Ferramenta de rotulagem e gold set
 
 ### D-028 · Gold set: amostra, divisão e rotulagem
+> Revisado: `menciona_atraso` e `pede_reembolso_troca` removidos (D-033); classes da
+> taxonomia v1.1 e causa secundária fora das métricas (D-034).
 **Amostra e divisão:**
 - 250 avaliações com comentário, 50 por nota, semente 42. Os 100 IDs da amostra da
   taxonomia foram excluídos (sobreposição verificada: 0).
@@ -543,3 +555,105 @@ A área não é rotulada nem prevista; é derivada da causa (`src/taxonomy.py`, 
   - OK do usuário antes de rodar (regra das 50 chamadas).
 - A escolha leva em conta a qualidade medida na Fase 5. Se o LLM não for melhor que o
   baseline no test set, rodá-lo em tudo não se justifica.
+
+## Fase 2.1 — Decisões do usuário após a rotulagem (2026-10-20)
+
+Números citados abaixo vêm de `reports/gold_set.md` (`python -m src.labeling.report`).
+
+### D-033 · `menciona_atraso` e `pede_reembolso_troca` deixam de existir
+- **Decidido pelo usuário.** Os dois campos estavam "não" nos 250 itens rotulados. O usuário
+  confirmou que não usou as teclas A/E durante a rotulagem: não foi falha da ferramenta.
+- **O que muda:** os campos saem do gold set, do modelo `Label`, da ferramenta de rotulagem, do
+  relatório, da taxonomia e do futuro schema do classificador. Também não terão métrica.
+- **Proibido:** inferir esses campos por LLM ou heurística, para preencher o gold set ou
+  qualquer outra coisa. Eles simplesmente deixam de existir no projeto.
+- O arquivo original, com as duas colunas zeradas, fica no histórico do git (commit `9a32701`).
+  `data/gold/labels_v1.csv` é esse arquivo sem as duas colunas.
+
+### D-034 · Taxonomia v1.1: mudanças mecânicas, sem rejulgar itens
+**Decidido pelo usuário.** Quatro mudanças:
+
+| | Mudança | Regra aplicada aos rótulos |
+|---|---|---|
+| a | `atraso_entrega` + `nao_recebido` → `problema_entrega` (área `logistica`) | as duas viram `problema_entrega`, na principal e na secundária |
+| b | nova classe `qualidade_insatisfatoria` (área `vendedor`, que já cobre produto e anúncio) | causa principal `outro` com nota livre "qualidade ruim" |
+| c | embalagem danificada com produto intacto | permanece em `outro`; regra escrita na taxonomia |
+| d | causa secundária | informativa, fora das métricas; o classificador não a prevê |
+
+Continuam 8 classes. Definições em `docs/taxonomia.md` (v1.1).
+
+**Mapeamento causa → área (revisa D-027):**
+
+| Causa | Área |
+|---|---|
+| `problema_entrega` | `logistica` |
+| `produto_defeituoso_ou_danificado`, `produto_diferente_do_anunciado`, `pedido_incompleto_ou_errado`, `qualidade_insatisfatoria` | `vendedor` |
+| `problema_atendimento_ou_comunicacao` | `atendimento` |
+| `elogio` | `nenhuma` |
+| `outro`, `ambiguo` | `indefinida` |
+
+As limitações de D-027 continuam. A segunda muda de nome: cancelamento e falta de estoque caem
+em `problema_entrega` → `logistica`, embora a responsabilidade seja do vendedor.
+
+**Implementação (auditável):**
+- `data/gold/labels_v1.csv`: rótulos originais congelados.
+- `python -m src.labeling.migrate --force` aplica as regras e grava `data/gold/labels.csv` em
+  v1.1. Um teste garante que o `labels.csv` versionado é exatamente a migração do v1; qualquer
+  edição manual o quebra.
+- Resultado: 49 itens em `problema_entrega` (29 vindos de `nao_recebido` e 20 de
+  `atraso_entrega`; dev 18, test 31), 18 em `qualidade_insatisfatoria` (dev 6, test 12) e uma
+  causa secundária renomeada. Nenhuma secundária precisou ser apagada.
+- Efeito: `outro` cai para 7 itens (dev 4, test 3) e entra na lista de classes raras, junto
+  com `produto_diferente_do_anunciado` (test 7) e `problema_atendimento_ou_comunicacao`
+  (dev 3, test 2).
+
+**Evidência que justifica as mudanças sem depender do test set.** Toda a evidência vem do
+corpus da Fase 1 ou do dev, com os rótulos v1:
+- **(a) fusão:**
+  - no corpus, 79,2% dos pares avaliação–pedido com "não recebi"/"não chegou" foram entregues
+    depois (`reports/fase1_dados.md`, seção 10);
+  - no dev, 5 dos 10 itens rotulados `nao_recebido` ("não vai chegar") têm pedido entregue;
+  - a mesma fronteira foi aplicada de forma muito diferente por dois leitores: 3
+    `nao_recebido` para 18 `atraso_entrega` na leitura da taxonomia (100 itens, Claude),
+    contra 10 para 8 no dev (usuário).
+
+  A fronteira não é decidível só pelo texto.
+- **(b) qualidade:** no dev, 6 dos 10 itens `outro` têm a nota "qualidade ruim". Só o dev já
+  mostra que esse é o tema mais comum de `outro`, e ele não tinha classe.
+- **(c) embalagem:** no dev, 3 dos 10 `outro` têm a nota "embalagem danificada". A regra
+  escreve o que já foi rotulado, sem mudar rótulo.
+- **(d) secundária:** decisão de método, sem dependência de dados.
+
+**Transparência:**
+- As contagens do test estavam no relatório da Fase 2 (commit `9a32701`) quando a decisão foi
+  tomada, e mostram o mesmo padrão. A decisão não precisa delas.
+- Nenhum modelo tinha sido rodado e nenhuma métrica tinha sido vista.
+- O sinal de entrega foi consultado só no dev, e só para esta auditoria.
+
+### D-035 · Versionamento: previsões sim, cache não (resolve D-009)
+- **Decidido pelo usuário.** `cache/` e `logs/` continuam fora do git, porque o cache guarda o
+  texto das avaliações.
+- **Previsões versionadas** em `data/predictions/`, um CSV por execução, sem texto:
+  - `review_id`;
+  - identificação da execução: modelo, `think`, versão do prompt e chave de cache;
+  - saída validada: `causa`, `gravidade`, `confianca`;
+  - status do schema, tentativas e latência.
+- **`justificativa` não é versionada:** é texto gerado pelo modelo e pode citar a avaliação.
+  Fica só no cache.
+- **Reprodução:** com o cache local, `RADAR_LLM_MODE=cache_only` refaz tudo. Sem o cache, os
+  relatórios são recalculados a partir das previsões versionadas.
+
+### D-036 · Baseline: TF-IDF + regressão logística treinada no dev
+- **Aprovado pelo usuário.** Treino só com o gold set do dev, itens não ambíguos (96 de 100).
+  - Números do dev: validação cruzada estratificada de 5 partes, semente 42.
+  - Fase 5: ajuste final no dev inteiro, avaliado uma vez no test.
+- **Entrada:** a mesma do LLM, ou seja, título + mensagem e a nota (D-029), para que a
+  comparação seja justa.
+- **Limitação:** `problema_atendimento_ou_comunicacao` tem 3 itens no dev, menos que as 5
+  partes; em algumas partes ela não aparece no teste. Isso é reportado, não contornado. Com
+  96 itens, o baseline é fraco por construção.
+
+### D-037 · `docs/plano.md`
+- O plano de fases, as regras de conduta e o protocolo de checkpoint ficam em `docs/plano.md`,
+  atualizado com as decisões até aqui. É a referência do plano, no lugar do contexto da
+  conversa. Mudanças de plano exigem entrada neste log e atualização do plano.

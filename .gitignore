@@ -9,7 +9,7 @@ data/raw/*
 data/processed/*
 !data/processed/.gitkeep
 
-# Cache de chamadas ao LLM e logs de uso (decisão de versionamento pendente; ver docs/decisoes.md)
+# Cache de chamadas ao LLM (contém textos) e logs de uso; previsões sem texto vão em data/predictions/ (D-035)
 cache/
 logs/
 

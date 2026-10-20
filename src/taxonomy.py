@@ -1,4 +1,4 @@
-"""Taxonomia de causas (v1): lista de classes, mapeamento causa -> área e textos da documentação.
+"""Taxonomia de causas (v1.1, D-034): classes, mapeamento causa -> área e textos da doc.
 
 As definições ficam só em `docs/taxonomia.md`; `taxonomy_sections` as lê de lá para exibição
 (ferramenta de rotulagem), evitando duas cópias que possam divergir.
@@ -10,14 +10,14 @@ import re
 from pathlib import Path
 from typing import Final
 
-TAXONOMY_VERSION = "v1"
+TAXONOMY_VERSION = "v1.1"
 
 CAUSES: tuple[str, ...] = (
-    "atraso_entrega",
-    "nao_recebido",
+    "problema_entrega",
     "produto_defeituoso_ou_danificado",
     "produto_diferente_do_anunciado",
     "pedido_incompleto_ou_errado",
+    "qualidade_insatisfatoria",
     "problema_atendimento_ou_comunicacao",
     "elogio",
     "outro",
@@ -26,11 +26,11 @@ AMBIGUOUS: Final = "ambiguo"  # só na rotulagem humana: "ambíguo / não sei"
 
 # Mapeamento fixo causa -> área responsável (D-027). Não é rotulado nem previsto.
 AREA_BY_CAUSE: dict[str, str] = {
-    "atraso_entrega": "logistica",
-    "nao_recebido": "logistica",
+    "problema_entrega": "logistica",
     "produto_defeituoso_ou_danificado": "vendedor",
     "produto_diferente_do_anunciado": "vendedor",
     "pedido_incompleto_ou_errado": "vendedor",
+    "qualidade_insatisfatoria": "vendedor",
     "problema_atendimento_ou_comunicacao": "atendimento",
     "elogio": "nenhuma",
     "outro": "indefinida",

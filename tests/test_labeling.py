@@ -62,18 +62,17 @@ def test_label_store_roundtrip_update_and_order(tmp_path: Path) -> None:
     store.save(
         Label(
             review_id="r3",
-            causa="atraso_entrega",
+            causa="problema_entrega",
             causa_secundaria="problema_atendimento_ou_comunicacao",
-            menciona_atraso=True,
             nota_livre='vírgula, "aspas"\ne quebra',
         ),
         order,
     )
-    store.save(Label(review_id="r1", causa=AMBIGUOUS, pede_reembolso_troca=True), order)
+    store.save(Label(review_id="r1", causa=AMBIGUOUS), order)
     labels = store.load()
     assert set(labels) == {"r1", "r3"}
-    assert labels["r1"].causa == AMBIGUOUS and labels["r1"].pede_reembolso_troca
-    assert labels["r3"].menciona_atraso and labels["r3"].nota_livre == 'vírgula, "aspas"\ne quebra'
+    assert labels["r1"].causa == AMBIGUOUS
+    assert labels["r3"].nota_livre == 'vírgula, "aspas"\ne quebra'
     assert labels["r3"].causa_secundaria == "problema_atendimento_ou_comunicacao"
     assert labels["r1"].updated_at != ""
     ids = pd.read_csv(store.path)["review_id"].tolist()
@@ -134,7 +133,6 @@ def test_app_saves_label_and_allows_going_back(app: AppTest, tmp_path: Path) -> 
 
     app.button(key="cause_produto_defeituoso_ou_danificado").click().run()
     app.button(key="sec_pedido_incompleto_ou_errado").click().run()
-    app.button(key="flag_pede_reembolso_troca").click().run()
     app.text_input(key="nota").input("caixa amassada").run()
     app.button(key="save").click().run()
     assert app.session_state["idx"] == 1
@@ -144,7 +142,6 @@ def test_app_saves_label_and_allows_going_back(app: AppTest, tmp_path: Path) -> 
     (label,) = labels.values()
     assert label.causa == "produto_defeituoso_ou_danificado"
     assert label.causa_secundaria == "pedido_incompleto_ou_errado"
-    assert label.pede_reembolso_troca and not label.menciona_atraso
     assert label.nota_livre == "caixa amassada"
 
     app.button(key="prev").click().run()  # volta e carrega o rótulo salvo para corrigir
@@ -173,14 +170,14 @@ def test_report_reweights_by_population_score_share() -> None:
     weights = score_weights(sample, pd.Series({1: 0.2, 5: 0.8}))
     assert weights.to_dict() == pytest.approx({1: 0.4, 5: 1.6})
 
-    df = sample.assign(causa=["atraso_entrega", "atraso_entrega", "elogio", AMBIGUOUS])
+    df = sample.assign(causa=["problema_entrega", "problema_entrega", "elogio", AMBIGUOUS])
     t = class_table(df, weights).set_index("classe")
-    assert t.loc["atraso_entrega", ["dev", "test", "total"]].tolist() == [1, 1, 2]
+    assert t.loc["problema_entrega", ["dev", "test", "total"]].tolist() == [1, 1, 2]
     assert t.loc[AMBIGUOUS, "total"] == 1 and t.loc[AMBIGUOUS, "% reponderado"] == ""
-    # sem ambíguos: 2 × 0,4 (atraso) contra 1 × 1,6 (elogio)
-    assert t.loc["atraso_entrega", "% reponderado"] == "33.3%"
+    # sem ambíguos: 2 × 0,4 (entrega) contra 1 × 1,6 (elogio)
+    assert t.loc["problema_entrega", "% reponderado"] == "33.3%"
     assert t.loc["elogio", "% reponderado"] == "66.7%"
-    assert t.loc["atraso_entrega", "área (D-027)"] == "logistica"
+    assert t.loc["problema_entrega", "área (D-027)"] == "logistica"
 
 
 def test_report_ambiguity_rate_overall_and_by_split() -> None:
@@ -192,27 +189,90 @@ def test_report_ambiguity_rate_overall_and_by_split() -> None:
     assert ambiguity_line(df) == "1 de 4 (25.0%); dev 1/2 (50.0%); test 0/2 (0.0%)"
 
 
-def test_report_secondary_notes_and_consistency() -> None:
-    from src.labeling.report import consistency_table, notes_table, secondary_table
+def test_report_secondary_and_notes() -> None:
+    from src.labeling.report import notes_table, secondary_table
 
     df = pd.DataFrame(
         {
             "split": ["dev", "test", "test", "dev"],
-            "causa": ["atraso_entrega", "outro", "outro", "nao_recebido"],
+            "causa": ["problema_entrega", "outro", "outro", "problema_entrega"],
             "causa_secundaria": [None, None, "elogio", "problema_atendimento_ou_comunicacao"],
-            "menciona_atraso": [False, False, False, True],
-            "pede_reembolso_troca": [False, False, False, False],
-            "nota_livre": ["", " Qualidade ruim", "qualidade ruim", ""],
+            "nota_livre": ["", " Frete caro", "frete caro", ""],
         }
     )
-    text = pd.Series(["está demorando", "não atrasou", "quero o estorno", "não chegou"])
     sec = secondary_table(df).set_index("causa_secundaria")
     assert sec["total"].to_dict() == {"elogio": 1, "problema_atendimento_ou_comunicacao": 1}
     notes = notes_table(df)
     assert notes[["nota", "causa", "dev", "test", "total"]].values.tolist() == [
-        ["qualidade ruim", "outro", 0, 2, 2]
+        ["frete caro", "outro", 0, 2, 2]
     ]
-    c = consistency_table(df, text).set_index("verificação")["total"].tolist()
-    # atraso sem flag; termo de atraso sem flag (inclui o falso positivo "não atrasou");
-    # termo de reembolso sem flag; elogio como secundária
-    assert c == [1, 2, 1, 1]
+
+
+def test_report_composition_and_low_score_coverage() -> None:
+    from src.labeling.report import composition_by_score, low_score_coverage
+
+    df = pd.DataFrame(
+        {
+            "split": ["dev", "dev", "test", "test", "dev"],
+            "review_score": [1, 5, 1, 5, 5],
+            "causa": ["problema_entrega", "problema_entrega", "outro", "elogio", AMBIGUOUS],
+        }
+    )
+    comp = composition_by_score(df).set_index("classe")
+    assert comp.loc["problema_entrega", "nota 1"] == "1 (50.0%)"
+    assert comp.loc["problema_entrega", "nota 5"] == "1 (33.3%)"
+    assert comp.loc["outro", "nota 3"] == "0"
+    # peso da nota 5 = 3 × o da nota 1: entrega tem 1 × 1 em nota ≤ 3 contra 1 × 3 em nota 5
+    cov = low_score_coverage(df, pd.Series({1: 1.0, 5: 3.0})).set_index("classe")
+    assert cov.loc["problema_entrega", "dev"] == "25.0% (n=2)"
+    assert cov.loc["problema_entrega", "test"] == "—"
+    assert cov.loc["todas exceto elogio", "total"] == "40.0% (n=3)"
+
+
+# --- migração v1 → v1.1 (D-034) ---
+
+
+def test_migration_rules_are_mechanical() -> None:
+    from src.labeling.migrate import migrate
+
+    v1 = pd.DataFrame(
+        {
+            "review_id": ["a", "b", "c", "d", "e", "f"],
+            "causa": [
+                "atraso_entrega",
+                "nao_recebido",
+                "outro",
+                "outro",
+                "pedido_incompleto_ou_errado",
+                "atraso_entrega",
+            ],
+            "causa_secundaria": ["", "", "", "", "atraso_entrega", "nao_recebido"],
+            "nota_livre": ["", "", " Qualidade ruim", "embalagem danificada", "", ""],
+            "updated_at": ["t"] * 6,
+        }
+    )
+    out = migrate(v1).set_index("review_id")
+    assert out["causa"].tolist() == [
+        "problema_entrega",
+        "problema_entrega",
+        "qualidade_insatisfatoria",
+        "outro",  # embalagem danificada com produto intacto continua em outro
+        "pedido_incompleto_ou_errado",
+        "problema_entrega",
+    ]
+    assert out.loc["e", "causa_secundaria"] == "problema_entrega"
+    assert out.loc["f", "causa_secundaria"] == ""  # ficaria igual à principal
+    assert out["nota_livre"].tolist() == v1["nota_livre"].tolist()
+    assert (out["updated_at"] == "t").all()
+
+
+def test_versioned_labels_are_the_migration_of_v1() -> None:
+    """`labels.csv` versionado = migração de `labels_v1.csv`; edição manual quebra este teste."""
+    from src.labeling.migrate import V1_FILE, migrate, read_labels_csv
+
+    gold = PROJECT_ROOT / "data" / "gold"
+    if not (gold / V1_FILE).exists():
+        pytest.skip("gold set não rotulado")
+    v1 = read_labels_csv(gold / V1_FILE)
+    assert "menciona_atraso" not in v1.columns  # flags removidas (D-033)
+    pd.testing.assert_frame_equal(migrate(v1), read_labels_csv(gold / "labels.csv"))

@@ -38,8 +38,6 @@ SHORTCUTS_HELP = """
 | `9` | ambíguo / não sei |
 | `Alt+1`–`Alt+8` | causa secundária (liga/desliga) |
 | `Alt+0` | limpa a causa secundária |
-| `A` | menciona atraso |
-| `E` | pede reembolso / troca |
 | `S` | salvar e ir ao próximo |
 | `←` / `→` | anterior / próximo (sem salvar) |
 | `N` | próximo não rotulado |
@@ -72,8 +70,6 @@ def empty_draft() -> dict[str, Any]:
     return {
         "causa": None,
         "causa_secundaria": None,
-        "menciona_atraso": False,
-        "pede_reembolso_troca": False,
     }
 
 
@@ -132,9 +128,6 @@ class LabelingApp:
         else:
             self.draft["causa_secundaria"] = cause
 
-    def toggle(self, flag: str) -> None:
-        self.draft[flag] = not self.draft[flag]
-
     def save_and_next(self) -> None:
         if self.draft["causa"] is None:
             self.state["error"] = "Escolha a causa principal (1–9) antes de salvar."
@@ -180,7 +173,7 @@ class LabelingApp:
             st.caption(f"review_id {rid}")
 
         self.render_cause_buttons()
-        self.render_secondary_and_flags()
+        self.render_secondary()
         st.text_input("Nota livre (opcional)", key="nota", max_chars=MAX_NOTE_CHARS)
         if err := self.state.get("error"):
             st.error(err)
@@ -203,7 +196,7 @@ class LabelingApp:
                     width="stretch",
                 )
 
-    def render_secondary_and_flags(self) -> None:
+    def render_secondary(self) -> None:
         with st.expander(
             f"Causa secundária (opcional): **{self.draft['causa_secundaria'] or 'nenhuma'}**",
             expanded=self.draft["causa_secundaria"] is not None,
@@ -225,21 +218,6 @@ class LabelingApp:
                 shortcut="Alt+0",
                 on_click=self.toggle_secondary,
                 args=(None,),
-            )
-        c1, c2 = st.columns(2)
-        for col, flag, key, text in (
-            (c1, "menciona_atraso", "A", "menciona atraso"),
-            (c2, "pede_reembolso_troca", "E", "pede reembolso / troca"),
-        ):
-            on = self.draft[flag]
-            col.button(
-                f"{key} · {text}: {'SIM' if on else 'não'}",
-                key=f"flag_{flag}",
-                shortcut=key,
-                type="primary" if on else "secondary",
-                on_click=self.toggle,
-                args=(flag,),
-                width="stretch",
             )
 
     def render_navigation(self) -> None:

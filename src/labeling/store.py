@@ -17,11 +17,11 @@ LABELS_FILE = "labels.csv"
 MAX_NOTE_CHARS = 200
 
 Cause = Literal[
-    "atraso_entrega",
-    "nao_recebido",
+    "problema_entrega",
     "produto_defeituoso_ou_danificado",
     "produto_diferente_do_anunciado",
     "pedido_incompleto_ou_errado",
+    "qualidade_insatisfatoria",
     "problema_atendimento_ou_comunicacao",
     "elogio",
     "outro",
@@ -30,13 +30,14 @@ assert set(get_args(Cause)) == set(CAUSES)
 
 
 class Label(BaseModel):
-    """Um rótulo manual. `causa = "ambiguo"` registra "ambíguo / não sei"."""
+    """Um rótulo manual (taxonomia v1.1). `causa = "ambiguo"` registra "ambíguo / não sei".
+
+    A causa secundária é informativa e não entra nas métricas (D-034).
+    """
 
     review_id: str
     causa: Cause | Literal["ambiguo"]
     causa_secundaria: Cause | None = None
-    menciona_atraso: bool = False
-    pede_reembolso_troca: bool = False
     nota_livre: str = Field(default="", max_length=MAX_NOTE_CHARS)
     updated_at: str = ""
 
@@ -64,12 +65,7 @@ class LabelStore:
         out = {}
         for row in rows:
             label = Label.model_validate(
-                {
-                    **row,
-                    "causa_secundaria": row["causa_secundaria"] or None,
-                    "menciona_atraso": row["menciona_atraso"] == "1",
-                    "pede_reembolso_troca": row["pede_reembolso_troca"] == "1",
-                }
+                {**row, "causa_secundaria": row["causa_secundaria"] or None}
             )
             out[label.review_id] = label
         return out
@@ -101,8 +97,6 @@ def _to_row(label: Label) -> dict[str, str]:
         "review_id": label.review_id,
         "causa": label.causa,
         "causa_secundaria": label.causa_secundaria or "",
-        "menciona_atraso": "1" if label.menciona_atraso else "0",
-        "pede_reembolso_troca": "1" if label.pede_reembolso_troca else "0",
         "nota_livre": label.nota_livre,
         "updated_at": label.updated_at,
     }
