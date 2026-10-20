@@ -91,20 +91,22 @@ def build_snapshot(
             """,
             {"c": c},
         )
+        # JOIN, não IN: dois IN sobre a chave composta fazem o SQLite buscar cada combinação
+        # (avaliação × pedido), custo quadrático
         for table in ("order_items", "payments", "order_segments"):
             con.execute(
-                f"INSERT INTO {table} SELECT * FROM src.{table} "
-                "WHERE order_id IN (SELECT order_id FROM orders)"
+                f"INSERT INTO main.{table} SELECT t.* FROM src.{table} t "
+                "JOIN main.orders o ON o.order_id = t.order_id"
             )
         con.execute(
-            "INSERT INTO reviews SELECT * FROM src.reviews "
+            "INSERT INTO main.reviews SELECT * FROM src.reviews "
             f"WHERE {before.format(col='review_answer_ts')}",
             {"c": c},
         )
         con.execute(
-            "INSERT INTO review_orders SELECT * FROM src.review_orders "
-            "WHERE review_id IN (SELECT review_id FROM reviews) "
-            "AND order_id IN (SELECT order_id FROM orders)"
+            "INSERT INTO main.review_orders SELECT ro.* FROM src.review_orders ro "
+            "JOIN main.reviews r ON r.review_id = ro.review_id "
+            "JOIN main.orders o ON o.order_id = ro.order_id"
         )
         _delivery_state(con, cutoff)
         if classif_db is not None:
