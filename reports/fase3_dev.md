@@ -6,7 +6,6 @@ _Gerado por `python -m src.eval.dev_report`. Não edite à mão._
 - Macro-F1 entre colchetes: IC 95% por bootstrap (1.000 reamostragens, semente 42). Reponderado: cada item pesa pela participação da sua nota no universo (D-028).
 - Falha de schema conta como erro (`FAIL`). Tempo do LLM: latência da chamada, com o modelo já carregado; do baseline: só a previsão (o ajuste está em `fit_s` no CSV).
 - Classes com poucos itens no dev (atendimento 3, outro 4) têm F1 instável.
-- Pendente (sem previsões ainda): LLM v1 com raciocínio.
 
 ## Resumo
 
@@ -14,6 +13,7 @@ _Gerado por `python -m src.eval.dev_report`. Não edite à mão._
 |---|---|---|---|---|---|---|---|
 | baseline TF-IDF+LR (CV 5 partes) | 0.408 [0.282; 0.508] | 0.401 | 0.625 | 0.759 | 0/100 (0.0%) | 0.000938 (0.00104) | — |
 | LLM v1 sem raciocínio | 0.846 [0.676; 0.937] | 0.804 | 0.906 | 0.913 | 0/100 (0.0%) | 1.36 (1.41) | 0 |
+| LLM v1 com raciocínio | 0.823 [0.665; 0.927] | 0.783 | 0.927 | 0.955 | 0/100 (0.0%) | 28 (31.7) | 0 |
 
 ### Métrica secundária: discordâncias em que a regra apoia o modelo (D-041)
 
@@ -23,6 +23,7 @@ _Gerado por `python -m src.eval.dev_report`. Não edite à mão._
 |---|---|---|---|
 | baseline TF-IDF+LR (CV 5 partes) | 0.418 | 0.408 | 0.635 |
 | LLM v1 sem raciocínio | 0.921 | 0.895 | 0.948 |
+| LLM v1 com raciocínio | 0.898 | 0.874 | 0.969 |
 
 ## Métricas por classe
 
@@ -52,6 +53,19 @@ _Gerado por `python -m src.eval.dev_report`. Não edite à mão._
 | elogio | 39 | 1.00 | 0.97 | 0.99 | 0.98 |
 | outro | 4 | 1.00 | 0.75 | 0.86 | 0.87 |
 
+### LLM v1 com raciocínio
+
+| classe | n | precisão | recall | F1 | F1 reponderado |
+|---|---|---|---|---|---|
+| entrega | 18 | 0.94 | 0.94 | 0.94 | 0.95 |
+| defeito | 6 | 0.75 | 1.00 | 0.86 | 0.88 |
+| diferente | 8 | 0.89 | 1.00 | 0.94 | 0.89 |
+| incompleto | 12 | 0.86 | 1.00 | 0.92 | 0.96 |
+| qualidade | 6 | 1.00 | 0.50 | 0.67 | 0.54 |
+| atendimento | 3 | 1.00 | 0.33 | 0.50 | 0.27 |
+| elogio | 39 | 1.00 | 1.00 | 1.00 | 1.00 |
+| outro | 4 | 0.75 | 0.75 | 0.75 | 0.76 |
+
 ## Matrizes de confusão (linhas = gold, colunas = previsto)
 
 ### baseline TF-IDF+LR (CV 5 partes)
@@ -80,14 +94,27 @@ _Gerado por `python -m src.eval.dev_report`. Não edite à mão._
 | elogio | 1 | 0 | 0 | 0 | 0 | 0 | 38 | 0 |
 | outro | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 3 |
 
+### LLM v1 com raciocínio
+
+| gold \ previsto | entrega | defeito | diferente | incompleto | qualidade | atendimento | elogio | outro |
+|---|---|---|---|---|---|---|---|---|
+| entrega | 17 | 0 | 0 | 1 | 0 | 0 | 0 | 0 |
+| defeito | 0 | 6 | 0 | 0 | 0 | 0 | 0 | 0 |
+| diferente | 0 | 0 | 8 | 0 | 0 | 0 | 0 | 0 |
+| incompleto | 0 | 0 | 0 | 12 | 0 | 0 | 0 | 0 |
+| qualidade | 0 | 2 | 1 | 0 | 3 | 0 | 0 | 0 |
+| atendimento | 1 | 0 | 0 | 0 | 0 | 1 | 0 | 1 |
+| elogio | 0 | 0 | 0 | 0 | 0 | 0 | 39 | 0 |
+| outro | 0 | 0 | 0 | 1 | 0 | 0 | 0 | 3 |
+
 ## Itens ambíguos (fora das métricas)
 
-| review_id | nota | baseline TF-IDF+LR (CV 5 partes) | LLM v1 sem raciocínio |
-|---|---|---|---|
-| c131334b | 3 | defeito | elogio |
-| 0f8b4ad4 | 3 | entrega | outro |
-| 76561047 | 3 | defeito | defeito |
-| 5875e483 | 2 | diferente | diferente |
+| review_id | nota | baseline TF-IDF+LR (CV 5 partes) | LLM v1 sem raciocínio | LLM v1 com raciocínio |
+|---|---|---|---|---|
+| c131334b | 3 | defeito | elogio | elogio |
+| 0f8b4ad4 | 3 | entrega | outro | outro |
+| 76561047 | 3 | defeito | defeito | defeito |
+| 5875e483 | 2 | diferente | diferente | diferente |
 
 ## A nota como atalho (D-029)
 
@@ -97,6 +124,7 @@ Acerto por nota e erros na direção da nota. No gold set, todos os itens de not
 |---|---|---|---|---|---|---|---|
 | baseline TF-IDF+LR (CV 5 partes) | 0.45 | 0.68 | 0.24 | 0.70 | 1.00 | 6/6 | 1/1 |
 | LLM v1 sem raciocínio | 0.85 | 1.00 | 0.82 | 0.90 | 0.95 | 0/6 | 0/1 |
+| LLM v1 com raciocínio | 0.95 | 0.95 | 0.88 | 0.85 | 1.00 | 0/6 | 0/1 |
 
 ## Observação: causa de entrega × sinal objetivo de entrega
 
@@ -107,6 +135,7 @@ Só descritivo, sem métrica: a flag de atraso foi removida (D-033). O sinal obj
 | gold (não ambíguos) | 96 | 18 | 11/18 | 12 | 11/12 | 91.7% |
 | baseline TF-IDF+LR (CV 5 partes) | 100 | 26 | 8/26 | 12 | 8/12 | 78.0% |
 | LLM v1 sem raciocínio | 100 | 20 | 12/20 | 12 | 12/12 | 92.0% |
+| LLM v1 com raciocínio | 100 | 18 | 11/18 | 12 | 11/12 | 92.0% |
 
 ## Erros do LLM v1 sem raciocínio (insumo da Fase 4)
 
