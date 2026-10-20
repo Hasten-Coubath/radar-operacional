@@ -944,6 +944,40 @@ mediana das 26 semanas anteriores com volume ≥ *n_min*, exigindo pelo menos 8.
 - **A avaliação (2018) só roda com o lote completo**, e com os *θ* gravados na calibração
   (`reports/backtest_calibracao.json`), sem mudança.
 
+### D-051 · Integridade do lote antes da avaliação de 2018 (critérios fixados antes do fim)
+> Decisão do usuário em 2026-10-20, com o lote em andamento (cerca de 45% das chamadas). O
+> script foi versionado antes de rodar no lote completo.
+
+`python -m src.eval.integridade` precisa passar inteiro; senão a avaliação não roda e o
+problema é reportado. Verificações:
+- nº de linhas = nº de comentários do banco; nenhum `review_id` faltando, duplicado ou fora do
+  banco;
+- só os status `classificado`, `nao_classificado` e `falha_schema`;
+- `nao_classificado` = nº de notas 4–5, e `classificado` + `falha_schema` = nº de notas ≤ 3;
+  nenhuma nota ≤ 3 sem classificação e nenhuma nota ≥ 4 classificada (D-039);
+- toda causa classificada pertence à taxonomia v1.1;
+- **falhas de schema em no máximo 1% das chamadas** (148 de 14.888); o número é reportado;
+- `lote_missing` até 2018-08-13 = 0.
+
+### D-052 · Observação: um mesmo alerta pode casar com dois incidentes (sem mudança na regra)
+> Registrado em 2026-10-20, depois da calibração. É uma observação: D-026 e D-048 seguem
+> congelados.
+
+- **O caso.** No estado PR há dois incidentes A seguidos em 2017: de 2017-11-06 a 2017-11-13
+  e de 2017-12-11 a 2017-12-18. A janela de casamento do primeiro vai até 2017-11-13 (o fim);
+  a do segundo começa em 2017-11-13 (início − 4 semanas). Os quatro métodos alertam em
+  2017-11-13 (no Radar, família `entrega`), e esse alerta conta como a detecção do incidente
+  de dezembro, 4 semanas antes do início, embora caia no fim do incidente de novembro.
+- **Efeito na calibração.** O recall não muda: sem esse alerta, os quatro métodos ainda
+  detectariam o incidente de dezembro com alertas de 2017-12-11 (B3) ou 2017-12-18 (Radar, B1
+  e B2). A antecedência do Radar sobre B1 e B2 nesse incidente é 0 nos dois casos. Muda só a
+  medida "início − detecção": +4 semanas em vez de −1 (Radar, B1 e B2) ou 0 (B3).
+- **Como ler.** A regra de D-026 casa cada incidente com o primeiro alerta da janela, sem
+  impedir que um alerta sirva a dois incidentes do mesmo segmento. Isso não altera a contagem
+  de falsos alarmes. Antecedências na borda da janela (4 semanas) devem ser conferidas na
+  tabela "incidente por incidente" do backtest antes de virar estudo de caso. Vale também para
+  2018, sem mudar a regra.
+
 ## Fase 8 — Agente investigador com verificador
 
 ### D-049 · Acesso SQL, verificador e loop do agente (código pronto, sem chamadas reais)
