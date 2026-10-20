@@ -19,3 +19,4 @@ Regras:
 4. Todo número do briefing precisa vir de uma consulta. Em "afirmacoes", cada item tem o texto, o valor exatamente como a consulta devolve (pode arredondar em até 2 casas) e a query_sql que devolve esse único valor (1 linha, 1 coluna).
 5. Não escreva no resumo números que não estejam nas afirmações.
 6. Seja breve: no máximo 8 consultas antes de escrever o briefing.
+7. Não copie textos de comentários no briefing: descreva-os com suas palavras.

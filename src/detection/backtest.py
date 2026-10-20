@@ -213,6 +213,88 @@ def diagnosis_table(detected: dict[str, pd.DataFrame]) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def export_alerts(
+    scores: dict[str, pd.DataFrame],
+    thetas: dict[str, float | None],
+    weeks: pd.DatetimeIndex,
+    path: Path,
+) -> None:
+    """Alertas de cada método no θ escolhido, no período (sem texto; entrada do agente)."""
+    parts = []
+    for m in METHODS:
+        theta = thetas.get(m)
+        if theta is None:
+            continue
+        a = alerts(scores[m], theta, weeks).assign(metodo=m)
+        parts.append(a)
+    al = pd.concat(parts, ignore_index=True) if parts else pd.DataFrame()
+    if not al.empty:
+        al["week"] = al["week"].dt.strftime("%Y-%m-%d")
+        al["score"] = al["score"].round(3)
+    al.to_csv(path, index=False, lineterminator="\n")
+
+
+def case_categories(con: sqlite3.Connection) -> pd.DataFrame:
+    """Categorias dos pedidos do vendedor do caso de D-026 (`5dceca12`), por nº de pedidos."""
+    return pd.read_sql(
+        "SELECT p.category AS segment_value, COUNT(DISTINCT oi.order_id) AS pedidos "
+        "FROM order_items oi JOIN products p USING (product_id) "
+        "WHERE oi.seller_id LIKE ? GROUP BY p.category ORDER BY pedidos DESC",
+        con,
+        params=(f"{CASE_SELLER}%",),
+    )
+
+
+def case_section(
+    cats: pd.DataFrame,
+    segs: pd.DataFrame,
+    scores: dict[str, pd.DataFrame],
+    theta: float | None,
+    inc_all: pd.DataFrame,
+) -> list[str]:
+    """D-026, item 3: há alerta do Radar ou incidente na categoria do vendedor em mar–mai/2018?"""
+    lo, hi = pd.Timestamp("2018-03-05"), pd.Timestamp("2018-05-28")
+    monitored = set(segs.loc[segs["segment_type"] == "categoria", "segment_value"])
+    rows = []
+    for c in cats.itertuples(index=False):
+        is_mon = c.segment_value in monitored
+        r = scores["Radar"]
+        sel = r[(r["segment_type"] == "categoria") & (r["segment_value"] == c.segment_value)]
+        sel = sel[(sel["week"] >= lo) & (sel["week"] <= hi)]
+        al = sel[sel["score"] > theta] if theta is not None else sel.iloc[0:0]
+        inc = inc_all[
+            (inc_all["segment_type"] == "categoria")
+            & (inc_all["segment_value"] == c.segment_value)
+            & (inc_all["end"] >= lo)
+            & (inc_all["start"] <= hi)
+        ]
+        rows.append(
+            {
+                "categoria": c.segment_value,
+                "pedidos do vendedor": int(c.pedidos),
+                "monitorada": "sim" if is_mon else "não",
+                "alertas do Radar (mar–mai/2018)": ", ".join(
+                    f"{w:%Y-%m-%d} ({f})" for w, f in zip(al["week"], al["familia"], strict=True)
+                )
+                or "nenhum",
+                "incidentes no período": ", ".join(
+                    f"{t} {s:%Y-%m-%d}→{e:%Y-%m-%d}"
+                    for t, s, e in zip(inc["tipo"], inc["start"], inc["end"], strict=True)
+                )
+                or "nenhum",
+            }
+        )
+    return [
+        f"## Caso `{CASE_SELLER}` (D-026, item 3)",
+        "",
+        "Vendedor não é segmento de detecção (D-021): o caso é examinado pelas categorias dos "
+        "seus pedidos. Categoria não monitorada = limitação de cobertura.",
+        "",
+        md_table(pd.DataFrame(rows)) if rows else "_vendedor sem pedidos_",
+        "",
+    ]
+
+
 def fmt_inc(inc: pd.DataFrame) -> pd.DataFrame:
     out = inc.copy()
     for c in ("start", "end"):
@@ -238,6 +320,7 @@ def run(period: str) -> Path:
     assert preds is not None
     inc_all = ground_truth(con, segs, weeks)
     scores = method_scores(con, segs, weeks, preds)
+    seller_cats = case_categories(con)
     con.close()
 
     if period == "calibracao":
@@ -253,6 +336,7 @@ def run(period: str) -> Path:
         for m in METHODS:
             curves.append(calibrate(scores[m], inc_all, pweeks)[1].assign(método=m))
     summary, detected = summary_at(scores, thetas, inc_all, pweeks)
+    export_alerts(scores, thetas, pweeks, reports / f"alertas_{period}.csv")
     period_inc = inc_all[(inc_all["start"] >= pweeks.min()) & (inc_all["start"] <= pweeks.max())]
     curve_t = pd.concat(curves, ignore_index=True)
     curve_t = curve_t[curve_t["theta"].isin([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 8.0])]
@@ -293,6 +377,8 @@ def run(period: str) -> Path:
         md_table(fmt_inc(period_inc.sort_values(["start", *KEYS]))),
         "",
     ]
+    if period == "avaliacao":
+        out += case_section(seller_cats, segs, scores, thetas.get("Radar"), inc_all)
     name = "backtest_calibracao.md" if period == "calibracao" else "backtest.md"
     path = reports / name
     path.write_text("\n".join(out), encoding="utf-8", newline="\n")

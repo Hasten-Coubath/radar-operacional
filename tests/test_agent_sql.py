@@ -112,3 +112,30 @@ def test_timeout_interrupts_long_query(db: Path) -> None:
     with pytest.raises(QueryRejected, match="tempo limite"):
         sq.query(slow)
     assert sq.query("SELECT 1").scalar() == 1  # a conexão continua utilizável
+
+
+def test_classifications_db_is_attached_read_only(db: Path, tmp_path: Path) -> None:
+    import pandas as pd
+
+    from src.agent.classifications import build
+
+    lote = pd.DataFrame(
+        {
+            "review_id": ["r1", "r2"],
+            "review_score": ["1", "5"],
+            "answered_week": ["2018-04-02"] * 2,
+            "status": ["classificado", "nao_classificado"],
+            "causa": ["qualidade_insatisfatoria", ""],
+            "area": ["vendedor", ""],
+        }
+    )
+    cdb = tmp_path / "c.db"
+    assert build(lote, cdb) == 2
+    sq = ReadOnlySQL(db, attach={"c": cdb})
+    assert (
+        sq.query("SELECT familia FROM classificacoes WHERE review_id = 'r1'").scalar() == "produto"
+    )
+    with pytest.raises(QueryRejected):
+        sq.query("WITH x AS (SELECT 1) DELETE FROM classificacoes")
+    with pytest.raises(sqlite3.DatabaseError):
+        sq.con.execute("DELETE FROM c.classificacoes")
