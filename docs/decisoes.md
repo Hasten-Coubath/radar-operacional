@@ -943,3 +943,34 @@ mediana das 26 semanas anteriores com volume ≥ *n_min*, exigindo pelo menos 8.
   Isso é conservador: no máximo, leva a um *θ* um pouco mais alto.
 - **A avaliação (2018) só roda com o lote completo**, e com os *θ* gravados na calibração
   (`reports/backtest_calibracao.json`), sem mudança.
+
+## Fase 8 — Agente investigador com verificador
+
+### D-049 · Acesso SQL, verificador e loop do agente (código pronto, sem chamadas reais)
+- **Somente leitura em quatro camadas** (`src/agent/sql.py`), cada uma testada sozinha:
+  1. arquivo aberto com `mode=ro`;
+  2. `PRAGMA query_only`;
+  3. autorizador do SQLite que só permite SELECT, leitura de colunas, funções e CTE recursiva,
+     e nega ATTACH e PRAGMA;
+  4. texto que precisa começar com SELECT/WITH, com uma instrução por chamada.
+- **Limites por consulta:** 5 s (progress handler) e 200 linhas.
+- **Testes** (`tests/test_agent_sql.py`, 17): INSERT, UPDATE, DELETE, DROP, CREATE, ALTER,
+  ATTACH, PRAGMA, VACUUM, REPLACE, escrita disfarçada de `WITH`, várias instruções, tempo
+  limite e limite de linhas.
+- **Verificador** (`src/agent/verify.py`): o briefing traz afirmações com texto, valor e
+  `query_sql`. Cada consulta é reexecutada e precisa devolver um único valor numérico.
+  - **Igualdade:** arredondamento de até 2 casas ou tolerância relativa de 0,1%.
+  - **Status:** `verificada`, `divergente` ou `erro`.
+  - **Números soltos** no resumo, sem afirmação correspondente, são listados. A detecção é
+    heurística: ignora datas `AAAA-MM-DD` e menções a nota de 1 a 5, e aceita *x* = 100 × valor
+    para percentuais.
+- **Loop** (`src/agent/investigator.py`): até 8 iterações de chamada de ferramenta, depois um
+  pedido final de briefing em JSON (`Briefing`, com até 2 tentativas, D-006) e a verificação.
+  Sem framework de agentes.
+- **Limitação, a resolver antes das chamadas reais:** o agente vê o banco inteiro. A regra de
+  usar só dados até a semana do alerta está no prompt (`prompts/agent_v1.md`), não é imposta.
+  - Numa investigação de um alerta antigo do backtest, o agente pode olhar o futuro.
+  - Opção de correção: um banco recortado na semana do alerta, gerado para cada
+    investigação. Fica como decisão do usuário.
+- **Chamadas reais ao Ollama:** só depois do lote da Fase 6, que ocupa a GPU. Até lá, só testes
+  com provedor roteirizado.
