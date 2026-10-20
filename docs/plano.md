@@ -207,3 +207,24 @@ usuário.
 - Arquitetura em Mermaid, resultados das Fases 5, 7 e 8, erros e correções.
 - Limitações, incluindo a seleção do dataset (D-020) e o mapeamento de área (D-027, D-034).
 - Instruções para rodar e um GIF do painel.
+
+## v2 (após concluir a v1)
+
+> Planejada, não iniciada. Só começa depois de todo o projeto v1 terminar (Fases 0–10) e com
+> aviso explícito do usuário. Nada desta seção é implementado antes disso.
+
+- **Revisão da taxonomia.** Uma nova versão da taxonomia, documentada em `docs/taxonomia.md`
+  e em `docs/decisoes.md`, com o motivo de cada mudança. Mudanças motivadas pelos resultados
+  da v1 no test set são identificadas como tal.
+- **Rerrotulagem cega do gold set.** O gold set é rerrotulado à mão na nova taxonomia sem
+  consultar as previsões de nenhum modelo nem os rótulos da v1 (que ficam ocultos na
+  ferramenta). Continua proibido usar o LLM para pré-rotular (avaliação circular).
+- **Novo test set nunca visto.** Sorteado com o mesmo protocolo da Fase 2 (D-028:
+  estratificado por nota, semente fixa e documentada, divisão gravada antes da rotulagem),
+  excluindo os IDs já usados (amostra da taxonomia e os 250 do gold set v1). Ele é usado uma
+  única vez, como o test da v1. O test set da v1 já foi visto e serve só como comparação
+  secundária, identificada como tal.
+- **Resultados da v1 preservados.** Rótulos, previsões e relatórios da v1 não são
+  sobrescritos nem reescritos; a v2 grava em arquivos próprios.
+- **Comparação v1 × v2 documentada.** Métricas lado a lado, com intervalos de confiança, e a
+  concordância entre os rótulos v1 e v2 nos mesmos itens (medida só depois da rerrotulagem).
