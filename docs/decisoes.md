@@ -893,3 +893,53 @@ não ambíguos, rodados uma única vez.
   `pedido_incompleto_ou_errado`, `problema_atendimento_ou_comunicacao` e `outro`. `elogio`
   não entra em sinal de problema.
 - Não muda a definição de incidente, os períodos nem o denominador (D-026, D-043).
+
+## Fase 7 — Detector e backtest
+
+### D-048 · Detalhes de implementação do backtest, fixados antes de existir resultado
+D-026, D-043 e D-047 deixam alguns detalhes em aberto. Eles ficam fixados aqui, antes de
+qualquer execução do detector, e não mudam depois.
+
+**Regra de alerta comum a todos os métodos.** É point-in-time, com a mesma referência de D-026:
+mediana das 26 semanas anteriores com volume ≥ *n_min*, exigindo pelo menos 8.
+- **Sinais de proporção** (Radar por família, B2 fração de notas ≤ 2, B3 atraso point-in-time):
+  - escore = (*p* − *b*) / √(*b′*(1 − *b′*)/*n*), com *b′* = max(*b*, 1/*n*);
+  - o piso evita divisão por zero quando a referência é 0.
+- **B1 (nota média):**
+  - escore = (*b* − *m*) / (*s*/√*n*);
+  - *m* é a média da semana e *b* a mediana das médias anteriores;
+  - *s* é o desvio-padrão das notas individuais das 26 semanas anteriores, agrupadas.
+  - Queda da nota → escore positivo.
+- **Radar:**
+  - um escore por família de causa (D-047): entrega, produto, incompleto, atendimento e outro;
+  - o escore do Radar na semana é o maior deles, e a família que o produz é o diagnóstico;
+  - taxa por família = comentários classificados com a causa / total de avaliações do
+    segmento na semana (D-043).
+- **Alerta:** escore > *θ* e volume ≥ *n_min* do sinal.
+  - *θ* é o único parâmetro calibrado por método, numa grade de 0,5 a 8,0 com passo de 0,25,
+    escolhendo o menor *θ* com no máximo 1 falso alarme por semana em 2017 (D-026).
+- **Volumes mínimos dos sinais:** 20 avaliações para Radar, B1 e B2; 30 pedidos na coorte
+  para B3. São os mesmos *n_min* dos tipos B e A de incidente.
+
+**Interpretação da regra de junção de D-026.**
+- Primeiro, sequências de semanas anômalas separadas por uma única semana não anômala são
+  unidas, inclusive semanas isoladas.
+- Depois, um bloco unido só vira incidente se tiver pelo menos 2 semanas anômalas
+  consecutivas.
+- Início e fim do incidente: a primeira e a última semana anômala do bloco.
+
+**Segmentos e semanas.**
+- **Segmentos:** os de D-026, com volume médio ≥ 5 comentários por semana na janela.
+- **Tipo A:** a categoria de um pedido vem de `order_segments`; um pedido com várias
+  categorias entra em todas, como no resto do projeto (D-016).
+- **Tipo B:** conta as avaliações ligadas a pelo menos um pedido entregue no prazo naquele
+  segmento.
+- **Semanas:** de 2016-08-01 a 2018-08-13. As anteriores à janela servem só de histórico para
+  a referência.
+
+**Calibração sem espiar 2018.**
+- Na calibração, o gabarito é calculado com dados até 2017-12-31.
+- Um alerta de dezembro que anteceda um incidente iniciado em 2018 conta como falso alarme.
+  Isso é conservador: no máximo, leva a um *θ* um pouco mais alto.
+- **A avaliação (2018) só roda com o lote completo**, e com os *θ* gravados na calibração
+  (`reports/backtest_calibracao.json`), sem mudança.
