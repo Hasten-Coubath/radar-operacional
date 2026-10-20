@@ -842,3 +842,35 @@ corpus da Fase 1 ou do dev, com os rótulos v1:
     nova é criada a partir dos erros do test.
 - **Nada é ajustado depois:** prompt, limiar, taxonomia e rótulos ficam como estão, qualquer
   que seja o resultado.
+
+## Fase 5 — Avaliação final no test set
+
+### D-046 · Resultado da avaliação única no test (nada é ajustado)
+Os números vêm de `reports/fase5_test.md` (`python -m src.eval.test_report`): 150 itens, 137
+não ambíguos, rodados uma única vez.
+
+| | macro-F1 [IC 95%] | macro-F1 reponderado | acurácia | acurácia reponderada | falha de schema | s/item |
+|---|---|---|---|---|---|---|
+| baseline | 0,422 [0,336; 0,492] | 0,471 | 0,708 | 0,839 | 0 | < 0,001 |
+| LLM v1 sem raciocínio | **0,657** [0,518; 0,754] | 0,672 | 0,810 | 0,879 | 0 | 1,68 (mediana) |
+
+- **Queda do dev para o test.** No LLM, o macro-F1 cai de 0,846 para 0,657 e a acurácia de
+  0,906 para 0,810. O baseline fica estável (0,408 → 0,422).
+- **A queda se concentra em `qualidade_insatisfatoria`.** São 12 itens no test, com recall de
+  0,17: 6 previstos como `defeito` e 4 como `diferente`.
+  - É o mesmo padrão das discordâncias em que a regra apoia o modelo no dev (D-041): rótulos
+    vindos do remapeamento mecânico da nota "qualidade ruim" (D-034) contra uma definição
+    escrita que manda falha física para `defeito` e comparação com o anúncio para `diferente`.
+  - O test não foi inspecionado item a item, então isso é uma hipótese compatível com os
+    números, não uma verificação.
+  - Outras confusões: 4 de `incompleto` previstos como `diferente`; 2 de `elogio` previstos
+    como `incompleto` e 2 como `outro`.
+- **Observação pós-teste, fora do protocolo:** o acerto da área responsável do LLM é 0,927, e
+  45 de 46 itens da área `vendedor` ficam com a área certa. Os erros de causa ficam quase
+  todos dentro da mesma área.
+- **Nota como atalho:** o baseline previu `elogio` em 7 de 8 itens de nota 4–5 que não eram
+  elogio; o LLM, em 0 de 8.
+- **Consequências** (registradas, sem ajustar nada):
+  - o número a citar é o do test, 0,657, não o do dev;
+  - a causa `qualidade_insatisfatoria` não é confiável para o detector;
+  - a melhoria da taxonomia já está registrada para uma versão futura (`docs/erros.md`).

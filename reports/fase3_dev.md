@@ -167,6 +167,17 @@ Só descritivo, sem métrica: a flag de atraso foi removida (D-033). O sinal obj
 | LLM v1 com raciocínio | 100 | 18 | 11/18 | 12 | 11/12 | 92.0% |
 | LLM v2 sem raciocínio | 100 | 17 | 10/17 | 12 | 10/12 | 91.0% |
 
+## Observação pós-teste: acerto por área responsável
+
+**Seção adicionada depois de ver o resultado do test**, para descrever erros entre classes da mesma área (defeito, diferente, incompleto e qualidade são todas `vendedor`). Não é métrica de decisão e não estava no protocolo.
+
+| método | acerto de área | acerto de causa | vendedor com área certa |
+|---|---|---|---|
+| baseline TF-IDF+LR (CV 5 partes) | 0.698 | 0.625 | 19/32 |
+| LLM v1 sem raciocínio | 0.948 | 0.906 | 31/32 |
+| LLM v1 com raciocínio | 0.958 | 0.927 | 32/32 |
+| LLM v2 sem raciocínio | 0.938 | 0.906 | 32/32 |
+
 ## Erros do LLM v1 sem raciocínio (insumo da Fase 4)
 
 9 erros em 96 itens. Só IDs e rótulos; a leitura dos textos está em `docs/erros.md`.

@@ -91,3 +91,29 @@ def test_invalid_output_twice_is_flagged_for_review(tmp_path: Path) -> None:
     lines = estimate(df, 100, 4096)
     assert any("schema válido: 0/1" in line for line in lines)
     assert any("estimativa para 100 itens" in line for line in lines)
+
+
+def test_batch_resumes_and_never_labels_high_scores(tmp_path: Path) -> None:
+    import src.classifier.batch as batch
+
+    comments = pd.DataFrame(
+        {
+            "review_id": [f"r{i}" for i in range(5)],
+            "review_score": [1, 5, 3, 4, 2],
+            "answered_week": ["2017-01-02"] * 5,
+            "comment_title": [None] * 5,
+            "comment_message": ["quebrou", "ótimo", "ok", "bom", "atrasou"],
+        }
+    )
+    path = tmp_path / "lote.csv"
+    client = client_with(tmp_path, [answer()])
+    batch.append_rows(path, [batch.not_classified_row(next(comments.iloc[[1]].itertuples()))])
+    n = batch.run_batch(client, comments, path, load_prompt())
+    assert n == 4  # r1 já estava gravado
+    out = pd.read_csv(path, keep_default_na=False).set_index("review_id")
+    assert out.loc[["r1", "r3"], "status"].tolist() == ["nao_classificado"] * 2
+    assert (out.loc[["r1", "r3"], "causa"] == "").all()  # nunca elogio por omissão
+    assert (out.loc[["r0", "r2", "r4"], "status"] == "classificado").all()
+    assert len(client.provider.calls) == 3  # type: ignore[attr-defined]  # só notas ≤ 3
+    assert batch.run_batch(client, comments, path, load_prompt()) == 0  # retomada: nada a fazer
+    assert len(client.provider.calls) == 3  # type: ignore[attr-defined]

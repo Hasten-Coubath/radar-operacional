@@ -31,7 +31,7 @@ from src.eval.classification import (
 from src.labeling.gold import load_gold_sample
 from src.labeling.report import score_weights
 from src.labeling.store import LabelStore
-from src.taxonomy import AMBIGUOUS
+from src.taxonomy import AMBIGUOUS, AREA_BY_CAUSE
 
 
 @dataclass(frozen=True)
@@ -146,6 +146,26 @@ def delivery_agreement(
                 "atrasados ou sem entrega no total": int(obj.sum()),
                 "desses, com causa entrega": f"{both}/{int(obj.sum())}",
                 "concordância (sim/sim + não/não)": pct(float((entrega == obj).mean())),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def area_accuracy(gold: pd.DataFrame, preds: dict[str, pd.DataFrame]) -> pd.DataFrame:
+    """Acerto da área derivada (D-027/D-034), sem ambíguos. Falha de schema conta como erro."""
+    clear = gold[gold["causa"] != AMBIGUOUS]
+    rows = []
+    for name, p in preds.items():
+        m = clear.merge(p[["review_id", "causa"]], on="review_id", suffixes=("", "_p"))
+        area_p = m["causa_p"].map(lambda c: AREA_BY_CAUSE.get(c, "FAIL"))
+        hit = m["causa"].map(AREA_BY_CAUSE) == area_p
+        vend = m["causa"].map(AREA_BY_CAUSE) == "vendedor"
+        rows.append(
+            {
+                "método": name,
+                "acerto de área": f"{hit.mean():.3f}",
+                "acerto de causa": f"{(m['causa'] == m['causa_p']).mean():.3f}",
+                "vendedor com área certa": f"{int(hit[vend].sum())}/{int(vend.sum())}",
             }
         )
     return pd.DataFrame(rows)
@@ -298,6 +318,14 @@ def write_report(
         "(taxonomia, `problema_entrega`).",
         "",
         md_table(delivery_agreement(gold, preds, late)),
+        "",
+        "## Observação pós-teste: acerto por área responsável",
+        "",
+        "**Seção adicionada depois de ver o resultado do test**, para descrever erros entre "
+        "classes da mesma área (defeito, diferente, incompleto e qualidade são todas `vendedor`). "
+        "Não é métrica de decisão e não estava no protocolo.",
+        "",
+        md_table(area_accuracy(gold, preds)),
         "",
     ]
     if errors_of is not None and errors_of in {m.file for m in methods if m.name in preds}:

@@ -87,9 +87,9 @@ usuário.
 | 1 | Dados, banco e taxonomia | concluída (D-016 a D-023) |
 | 1.1 | Sinal de atraso point-in-time e correções | concluída (D-024 a D-026) |
 | 2 | Ferramenta de rotulagem e gold set | concluída (D-027 a D-032; ajustes D-033 a D-037) |
-| 3 | Baseline e LLM v1 no dev | concluída, aguardando revisão (D-038 a D-040) |
-| 4 | Análise de erros e LLM v2 | — |
-| 5 | Avaliação final no test set (uma vez) | — |
+| 3 | Baseline e LLM v1 no dev | concluída (D-038 a D-041) |
+| 4 | Análise de erros e LLM v2 | concluída, aguardando revisão (D-042 a D-045) |
+| 5 | Avaliação final no test set (uma vez) | concluída, aguardando revisão (D-046); falta com raciocínio, depois do lote |
 | 6 | Classificação em lote | — |
 | 7 | Detector e backtest | — |
 | 8 | Agente investigador com verificador | — |
