@@ -810,3 +810,35 @@ corpus da Fase 1 ou do dev, com os rótulos v1:
     - se nenhum limiar melhorar a acurácia do restante em pelo menos 2 p.p. sobre não enviar
       nada, a proposta é **não usar limiar**, porque a confiança não é informativa.
   - O limiar escolhido no dev é aplicado sem ajuste no test (Fase 5).
+
+### D-045 · Resultado da Fase 4 e protocolo da Fase 5
+**Resultado da Fase 4** (`reports/fase4_dev.md`, regras de D-044 aplicadas sem mudança):
+- **A v2 foi rejeitada e a v1 continua.**
+  - Condição 1 passa: macro-F1 de 0,864 na v2 contra 0,846 na v1.
+  - Condição 3 passa: 0 falhas de schema.
+  - **Condição 2 falha:** a v2 perdeu um acerto em `outro` (`d1952450`).
+- **Item a item:** 6 itens mudaram, com 3 ganhos e 3 perdas; os acertos ficaram em 87 a 87.
+  - Os ganhos vieram de três correções: embalagem, causa raiz e um item de qualidade × anúncio.
+  - As perdas foram um `outro` virando `diferente` e dois de entrega, um virando incompleto e
+    outro virando elogio.
+  - A v2 mexeu no mesmo tanto que consertou. Não há outra iteração (D-044).
+- **Limiar de confiança: nenhum.** A confiança da v1 tem só 5 valores (0,80 a 1,00).
+  - O primeiro limiar que envia alguém (0,85) já manda 19,8% dos itens, acima do orçamento
+    de 15%.
+  - Com até 15% enviados, o ganho é de 0 p.p.
+  - Na Fase 6, nenhum item vai para revisão humana por confiança. A confiança fica gravada
+    para uso futuro.
+
+**Protocolo da Fase 5** (avaliação única no test, autorizada pelo usuário):
+- **Configurações avaliadas:**
+  - baseline TF-IDF+LR (D-036, D-040), ajustado nos 96 itens não ambíguos do dev;
+  - LLM v1 sem raciocínio (D-042).
+
+  O LLM v1 com raciocínio roda no test depois do lote da Fase 6.
+- **Liberação do test:** o executor só aceita o test com `--allow-test`, uma flag reservada a
+  esta avaliação.
+- **Métricas:** as mesmas da Fase 3 (`reports/fase5_test.md`), com bootstrap de 95%.
+  - Não há métrica secundária no test: as anotações de D-041 são do dev, e nenhuma anotação
+    nova é criada a partir dos erros do test.
+- **Nada é ajustado depois:** prompt, limiar, taxonomia e rótulos ficam como estão, qualquer
+  que seja o resultado.

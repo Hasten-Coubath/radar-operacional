@@ -6,8 +6,9 @@ Uso:
 - `python -m src.classifier.run --role classifier --confirm`: o dev inteiro. Acima de 50 itens o
   script exige `--confirm`, dado só depois do OK do usuário à estimativa (D-013).
 
-O test set é recusado até a Fase 5. As previsões vão para `data/predictions/`; a justificativa
-gerada pelo modelo fica só no cache, porque pode citar a avaliação.
+O test set é recusado, salvo com `--allow-test`, reservado à avaliação única da Fase 5 (D-045).
+`--prompt v2` escolhe outra versão do prompt. As previsões vão para `data/predictions/`; a
+justificativa gerada pelo modelo fica só no cache, porque pode citar a avaliação.
 """
 
 from __future__ import annotations
@@ -28,15 +29,17 @@ from src.labeling.gold import load_gold_sample
 from src.llm.client import LLMClient
 from src.taxonomy import AREA_BY_CAUSE
 
-ALLOWED_SPLITS = ("dev",)  # o test só é liberado na Fase 5
+ALLOWED_SPLITS = ("dev",)  # o test só com allow_test=True, na Fase 5 (D-045)
 MAX_UNCONFIRMED = 50
 PREDICTIONS_DIR = "data/predictions"
 CTX_WARN_SHARE = 0.9
 
 
-def select_ids(sample: pd.DataFrame, split: str, limit: int | None, seed: int) -> list[str]:
+def select_ids(
+    sample: pd.DataFrame, split: str, limit: int | None, seed: int, *, allow_test: bool = False
+) -> list[str]:
     """IDs do split na ordem de apresentação; com `limit`, um sorteio fixo pela semente."""
-    if split not in ALLOWED_SPLITS:
+    if split not in ALLOWED_SPLITS and not (allow_test and split == "test"):
         raise SystemExit(f"Split {split!r} bloqueado: o test set só é usado na Fase 5.")
     part = sample[sample["split"] == split].sort_values("position")
     if limit is not None and limit < len(part):
@@ -75,20 +78,26 @@ def warm_up(client: LLMClient, role: str) -> None:
 
 
 def run(
-    client: LLMClient, reviews: Sequence[Review], *, role: str, system: str, split: str
+    client: LLMClient,
+    reviews: Sequence[Review],
+    *,
+    role: str,
+    system: str,
+    split: str,
+    prompt_version: str = PROMPT_VERSION,
 ) -> pd.DataFrame:
     settings = client.roles[role]
     options = settings.options or {}
     rows: list[dict[str, Any]] = []
     for i, review in enumerate(reviews, 1):
-        res = classify(client, review, role=role, system=system, tag=f"{role}_{PROMPT_VERSION}")
+        res = classify(client, review, role=role, system=system, tag=f"{role}_{prompt_version}")
         first = res.attempts[0]
         p = res.parsed
         rows.append(
             {
                 "review_id": review.review_id,
                 "split": split,
-                "prompt_version": PROMPT_VERSION,
+                "prompt_version": prompt_version,
                 "model": settings.model,
                 "think": settings.think,
                 "num_ctx": options.get("num_ctx"),
@@ -147,6 +156,8 @@ def main() -> None:
     parser.add_argument("--split", default="dev")
     parser.add_argument("--limit", type=int, default=None, help="sorteia N itens do split")
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--prompt", default=PROMPT_VERSION, help="versão em prompts/")
+    parser.add_argument("--allow-test", action="store_true", help="só na Fase 5 (D-045)")
     parser.add_argument(
         "--confirm", action="store_true", help=f"exigido acima de {MAX_UNCONFIRMED}"
     )
@@ -154,7 +165,7 @@ def main() -> None:
 
     cfg = load_config()
     sample = load_gold_sample(resolve_path(cfg["paths"]["gold_dir"]))
-    ids = select_ids(sample, args.split, args.limit, args.seed)
+    ids = select_ids(sample, args.split, args.limit, args.seed, allow_test=args.allow_test)
     if len(ids) > MAX_UNCONFIRMED and not args.confirm:
         raise SystemExit(
             f"{len(ids)} itens (> {MAX_UNCONFIRMED}): mostre a estimativa ao usuário e, com o OK, "
@@ -168,14 +179,21 @@ def main() -> None:
     settings = client.roles[args.role]
     print(
         f"papel {args.role}: {settings.model}, think={settings.think}, "
-        f"options={settings.options}, max_tokens={settings.max_tokens}, prompt {PROMPT_VERSION}"
+        f"options={settings.options}, max_tokens={settings.max_tokens}, prompt {args.prompt}"
     )
     if client.mode == "live":
         warm_up(client, args.role)
-    df = run(client, reviews, role=args.role, system=load_prompt(), split=args.split)
+    df = run(
+        client,
+        reviews,
+        role=args.role,
+        system=load_prompt(args.prompt),
+        split=args.split,
+        prompt_version=args.prompt,
+    )
 
     suffix = f"_n{args.limit}" if args.limit is not None else ""
-    out = resolve_path(PREDICTIONS_DIR) / f"{args.role}_{PROMPT_VERSION}_{args.split}{suffix}.csv"
+    out = resolve_path(PREDICTIONS_DIR) / f"{args.role}_{args.prompt}_{args.split}{suffix}.csv"
     Path(out).parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(out, index=False, lineterminator="\n")
     n_split = int((sample["split"] == args.split).sum())

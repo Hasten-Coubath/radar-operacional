@@ -10,6 +10,7 @@ from __future__ import annotations
 import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 
@@ -43,6 +44,7 @@ METHODS = (
     Method("baseline TF-IDF+LR (CV 5 partes)", "baseline_v1_dev_cv.csv"),
     Method("LLM v1 sem raciocínio", "classifier_v1_dev.csv"),
     Method("LLM v1 com raciocínio", "classifier_think_v1_dev.csv"),
+    Method("LLM v2 sem raciocínio", "classifier_v2_dev.csv"),
 )
 ERRORS_OF = "classifier_v1_dev.csv"  # lista de erros para a análise da Fase 4
 RULE_FILE = "discordancias_regra.csv"  # D-041: anotação, não altera o gold
@@ -165,12 +167,12 @@ def error_list(gold: pd.DataFrame, pred: pd.DataFrame) -> pd.DataFrame:
     )
 
 
-def main() -> None:
-    cfg = load_config()
+def load_split(cfg: dict[str, Any], split: str) -> tuple[pd.DataFrame, pd.Series, pd.Series]:
+    """Gold do split (com ambíguos), pesos por nota e sinal objetivo retrospectivo de entrega."""
     gold_dir = resolve_path(cfg["paths"]["gold_dir"])
     sample = load_gold_sample(gold_dir)
     labels = pd.DataFrame([lb.model_dump() for lb in LabelStore(gold_dir).load().values()])
-    gold = sample[sample["split"] == "dev"].merge(labels[["review_id", "causa"]], on="review_id")
+    gold = sample[sample["split"] == split].merge(labels[["review_id", "causa"]], on="review_id")
     con = sqlite3.connect(f"file:{resolve_path(cfg['paths']['db_path'])}?mode=ro", uri=True)
     pop = pd.read_sql(
         "SELECT review_score, COUNT(*) n FROM reviews WHERE has_comment = 1 GROUP BY review_score",
@@ -186,12 +188,26 @@ def main() -> None:
         .astype(bool)
     )
     con.close()
-    weights = score_weights(gold, pop / pop.sum())
+    return gold, score_weights(gold, pop / pop.sum()), late
+
+
+def write_report(
+    *,
+    split: str = "dev",
+    methods: tuple[Method, ...] = METHODS,
+    title: str = "# Fase 3: baseline e LLM no dev",
+    filename: str = "fase3_dev.md",
+    errors_of: str | None = ERRORS_OF,
+    intro: tuple[str, ...] = (),
+) -> Path:
+    cfg = load_config()
+    gold_dir = resolve_path(cfg["paths"]["gold_dir"])
+    gold, weights, late = load_split(cfg, split)
 
     pred_dir = resolve_path(PREDICTIONS_DIR)
     preds: dict[str, pd.DataFrame] = {}
     missing: list[str] = []
-    for m in METHODS:
+    for m in methods:
         path = Path(pred_dir) / m.file
         if path.exists():
             preds[m.name] = pd.read_csv(path, dtype={"causa": str}, keep_default_na=False)
@@ -200,20 +216,25 @@ def main() -> None:
     scored = {name: align(gold, p, weights) for name, p in preds.items()}
     rule_path = gold_dir / RULE_FILE
     rule = pd.read_csv(rule_path, dtype=str) if rule_path.exists() else None
+    if rule is not None:
+        rule = rule[rule["review_id"].isin(gold["review_id"])]
+        rule = rule if len(rule) else None
     n_clear = int((gold["causa"] != AMBIGUOUS).sum())
 
     out = [
-        "# Fase 3: baseline e LLM v1 no dev",
+        title,
         "",
-        "_Gerado por `python -m src.eval.dev_report`. Não edite à mão._",
+        "_Gerado por script versionado (`src/eval/`). Não edite à mão._",
         "",
-        f"- Dev: {len(gold)} itens, {n_clear} não ambíguos nas métricas (D-031). Taxonomia v1.1, "
-        "8 classes.",
+        *intro,
+        f"- {split}: {len(gold)} itens, {n_clear} não ambíguos nas métricas (D-031). "
+        "Taxonomia v1.1, 8 classes.",
         "- Macro-F1 entre colchetes: IC 95% por bootstrap (1.000 reamostragens, semente 42). "
         "Reponderado: cada item pesa pela participação da sua nota no universo (D-028).",
         "- Falha de schema conta como erro (`FAIL`). Tempo do LLM: latência da chamada, com o "
         "modelo já carregado; do baseline: só a previsão (o ajuste está em `fit_s` no CSV).",
-        "- Classes com poucos itens no dev (atendimento 3, outro 4) têm F1 instável.",
+        "- Classes com poucos itens têm F1 instável (no dev: atendimento 3, outro 4; no test: "
+        "atendimento 2, outro 3).",
     ]
     if missing:
         out.append(f"- Pendente (sem previsões ainda): {', '.join(missing)}.")
@@ -279,8 +300,8 @@ def main() -> None:
         md_table(delivery_agreement(gold, preds, late)),
         "",
     ]
-    if ERRORS_OF in {m.file for m in METHODS if m.name in preds}:
-        name = next(m.name for m in METHODS if m.file == ERRORS_OF)
+    if errors_of is not None and errors_of in {m.file for m in methods if m.name in preds}:
+        name = next(m.name for m in methods if m.file == errors_of)
         err = error_list(gold, preds[name])
         out += [
             f"## Erros do {name} (insumo da Fase 4)",
@@ -291,9 +312,14 @@ def main() -> None:
             md_table(err),
             "",
         ]
-    path = resolve_path(cfg["paths"]["reports_dir"]) / "fase3_dev.md"
+    path = resolve_path(cfg["paths"]["reports_dir"]) / filename
     path.write_text("\n".join(out), encoding="utf-8", newline="\n")
     print(f"Relatório gravado em {path}")
+    return path
+
+
+def main() -> None:
+    write_report()
 
 
 if __name__ == "__main__":

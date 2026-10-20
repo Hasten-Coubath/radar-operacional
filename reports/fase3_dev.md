@@ -1,11 +1,11 @@
-# Fase 3: baseline e LLM v1 no dev
+# Fase 3: baseline e LLM no dev
 
-_Gerado por `python -m src.eval.dev_report`. Não edite à mão._
+_Gerado por script versionado (`src/eval/`). Não edite à mão._
 
-- Dev: 100 itens, 96 não ambíguos nas métricas (D-031). Taxonomia v1.1, 8 classes.
+- dev: 100 itens, 96 não ambíguos nas métricas (D-031). Taxonomia v1.1, 8 classes.
 - Macro-F1 entre colchetes: IC 95% por bootstrap (1.000 reamostragens, semente 42). Reponderado: cada item pesa pela participação da sua nota no universo (D-028).
 - Falha de schema conta como erro (`FAIL`). Tempo do LLM: latência da chamada, com o modelo já carregado; do baseline: só a previsão (o ajuste está em `fit_s` no CSV).
-- Classes com poucos itens no dev (atendimento 3, outro 4) têm F1 instável.
+- Classes com poucos itens têm F1 instável (no dev: atendimento 3, outro 4; no test: atendimento 2, outro 3).
 
 ## Resumo
 
@@ -14,6 +14,7 @@ _Gerado por `python -m src.eval.dev_report`. Não edite à mão._
 | baseline TF-IDF+LR (CV 5 partes) | 0.408 [0.282; 0.508] | 0.401 | 0.625 | 0.759 | 0/100 (0.0%) | 0.000938 (0.00104) | — |
 | LLM v1 sem raciocínio | 0.846 [0.676; 0.937] | 0.804 | 0.906 | 0.913 | 0/100 (0.0%) | 1.36 (1.41) | 0 |
 | LLM v1 com raciocínio | 0.823 [0.665; 0.927] | 0.783 | 0.927 | 0.955 | 0/100 (0.0%) | 28 (31.7) | 0 |
+| LLM v2 sem raciocínio | 0.864 [0.700; 0.945] | 0.853 | 0.906 | 0.919 | 0/100 (0.0%) | 1.42 (1.45) | 0 |
 
 ### Métrica secundária: discordâncias em que a regra apoia o modelo (D-041)
 
@@ -24,6 +25,7 @@ _Gerado por `python -m src.eval.dev_report`. Não edite à mão._
 | baseline TF-IDF+LR (CV 5 partes) | 0.418 | 0.408 | 0.635 |
 | LLM v1 sem raciocínio | 0.921 | 0.895 | 0.948 |
 | LLM v1 com raciocínio | 0.898 | 0.874 | 0.969 |
+| LLM v2 sem raciocínio | 0.916 | 0.897 | 0.938 |
 
 ## Métricas por classe
 
@@ -66,6 +68,19 @@ _Gerado por `python -m src.eval.dev_report`. Não edite à mão._
 | elogio | 39 | 1.00 | 1.00 | 1.00 | 1.00 |
 | outro | 4 | 0.75 | 0.75 | 0.75 | 0.76 |
 
+### LLM v2 sem raciocínio
+
+| classe | n | precisão | recall | F1 | F1 reponderado |
+|---|---|---|---|---|---|
+| entrega | 18 | 0.88 | 0.83 | 0.86 | 0.78 |
+| defeito | 6 | 0.75 | 1.00 | 0.86 | 0.88 |
+| diferente | 8 | 0.80 | 1.00 | 0.89 | 0.87 |
+| incompleto | 12 | 0.85 | 0.92 | 0.88 | 0.85 |
+| qualidade | 6 | 1.00 | 0.67 | 0.80 | 0.81 |
+| atendimento | 3 | 1.00 | 0.67 | 0.80 | 0.73 |
+| elogio | 39 | 0.97 | 0.97 | 0.97 | 0.97 |
+| outro | 4 | 1.00 | 0.75 | 0.86 | 0.92 |
+
 ## Matrizes de confusão (linhas = gold, colunas = previsto)
 
 ### baseline TF-IDF+LR (CV 5 partes)
@@ -107,14 +122,27 @@ _Gerado por `python -m src.eval.dev_report`. Não edite à mão._
 | elogio | 0 | 0 | 0 | 0 | 0 | 0 | 39 | 0 |
 | outro | 0 | 0 | 0 | 1 | 0 | 0 | 0 | 3 |
 
+### LLM v2 sem raciocínio
+
+| gold \ previsto | entrega | defeito | diferente | incompleto | qualidade | atendimento | elogio | outro |
+|---|---|---|---|---|---|---|---|---|
+| entrega | 15 | 0 | 0 | 2 | 0 | 0 | 1 | 0 |
+| defeito | 0 | 6 | 0 | 0 | 0 | 0 | 0 | 0 |
+| diferente | 0 | 0 | 8 | 0 | 0 | 0 | 0 | 0 |
+| incompleto | 0 | 0 | 1 | 11 | 0 | 0 | 0 | 0 |
+| qualidade | 0 | 2 | 0 | 0 | 4 | 0 | 0 | 0 |
+| atendimento | 1 | 0 | 0 | 0 | 0 | 2 | 0 | 0 |
+| elogio | 1 | 0 | 0 | 0 | 0 | 0 | 38 | 0 |
+| outro | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 3 |
+
 ## Itens ambíguos (fora das métricas)
 
-| review_id | nota | baseline TF-IDF+LR (CV 5 partes) | LLM v1 sem raciocínio | LLM v1 com raciocínio |
-|---|---|---|---|---|
-| c131334b | 3 | defeito | elogio | elogio |
-| 0f8b4ad4 | 3 | entrega | outro | outro |
-| 76561047 | 3 | defeito | defeito | defeito |
-| 5875e483 | 2 | diferente | diferente | diferente |
+| review_id | nota | baseline TF-IDF+LR (CV 5 partes) | LLM v1 sem raciocínio | LLM v1 com raciocínio | LLM v2 sem raciocínio |
+|---|---|---|---|---|---|
+| c131334b | 3 | defeito | elogio | elogio | elogio |
+| 0f8b4ad4 | 3 | entrega | outro | outro | elogio |
+| 76561047 | 3 | defeito | defeito | defeito | defeito |
+| 5875e483 | 2 | diferente | diferente | diferente | diferente |
 
 ## A nota como atalho (D-029)
 
@@ -125,6 +153,7 @@ Acerto por nota e erros na direção da nota. No gold set, todos os itens de not
 | baseline TF-IDF+LR (CV 5 partes) | 0.45 | 0.68 | 0.24 | 0.70 | 1.00 | 6/6 | 1/1 |
 | LLM v1 sem raciocínio | 0.85 | 1.00 | 0.82 | 0.90 | 0.95 | 0/6 | 0/1 |
 | LLM v1 com raciocínio | 0.95 | 0.95 | 0.88 | 0.85 | 1.00 | 0/6 | 0/1 |
+| LLM v2 sem raciocínio | 0.90 | 0.95 | 0.88 | 0.85 | 0.95 | 1/6 | 0/1 |
 
 ## Observação: causa de entrega × sinal objetivo de entrega
 
@@ -136,6 +165,7 @@ Só descritivo, sem métrica: a flag de atraso foi removida (D-033). O sinal obj
 | baseline TF-IDF+LR (CV 5 partes) | 100 | 26 | 8/26 | 12 | 8/12 | 78.0% |
 | LLM v1 sem raciocínio | 100 | 20 | 12/20 | 12 | 12/12 | 92.0% |
 | LLM v1 com raciocínio | 100 | 18 | 11/18 | 12 | 11/12 | 92.0% |
+| LLM v2 sem raciocínio | 100 | 17 | 10/17 | 12 | 10/12 | 91.0% |
 
 ## Erros do LLM v1 sem raciocínio (insumo da Fase 4)
 
