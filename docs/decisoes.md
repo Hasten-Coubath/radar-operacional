@@ -978,6 +978,31 @@ problema é reportado. Verificações:
   tabela "incidente por incidente" do backtest antes de virar estudo de caso. Vale também para
   2018, sem mudar a regra.
 
+### D-053 · Desenho final: B2 detecta, a camada de IA explica (decisão POSTERIOR à avaliação)
+> **Decisão do usuário em 2026-10-20, tomada DEPOIS de ver a avaliação de 2018**
+> (`reports/backtest.md`). Não é uma escolha feita às cegas: é motivada pelo resultado do test
+> do detector, e é declarada assim. Os resultados do backtest ficam exatamente como estão; nada
+> é recalculado nem reajustado.
+
+**O que o backtest mostrou** (números de `reports/backtest.md`, θ fixados em 2017):
+- **Detecção:** no mesmo nível de falsos alarmes (0,88 por semana), o Radar detecta 22 de 26
+  incidentes A e o B2 (fração de notas ≤ 2) detecta 24. Em todos os níveis da curva, o Radar
+  fica igual ou atrás das linhas de base.
+- **Antecedência:** mediana de 0 semana contra B1 e B2; média de −0,73 contra B1 e −0,10
+  contra B2 (o Radar detecta, em média, um pouco depois).
+- **Diagnóstico:** a família do alerta é compatível em 19 de 22 incidentes A (86%), pouco acima
+  da taxa de base de `entrega` em todos os alertas do Radar (88 de 114, 77%). Em 2017: 11 de 16
+  (69%) contra 40 de 70 (57%).
+
+**Desenho final do sistema:**
+- **Detector: B2** (fração de avaliações com nota ≤ 2 na semana, contra a mediana das 26
+  semanas anteriores; θ = 2,0 da calibração de 2017, D-048).
+- **Camada de IA para explicar o alerta:** as classificações do lote (Fase 6) e o agente
+  investigador com verificação (Fase 8) dizem a causa, os segmentos, vendedores e pedidos
+  afetados e o impacto. Cada número do briefing é reexecutado pelo verificador.
+- O Radar continua no repositório e no relatório do backtest como o método avaliado. Ele não
+  é removido nem reescrito.
+
 ## Fase 8 — Agente investigador com verificador
 
 ### D-049 · Acesso SQL, verificador e loop do agente (código pronto, sem chamadas reais)
