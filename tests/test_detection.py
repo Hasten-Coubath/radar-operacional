@@ -195,3 +195,22 @@ def test_backtest_refuses_incomplete_batch() -> None:
     assert lote_missing(con, None, "2017-12-31") == 1
     assert lote_missing(con, preds, "2017-12-31") == 0
     assert lote_missing(con, preds, "2018-08-13") == 1  # falta "c" para a avaliação
+
+
+def test_diagnosis_base_rate_counts_all_radar_alerts() -> None:
+    from src.detection.backtest import diagnosis_table
+
+    det = {
+        "Radar": pd.DataFrame(
+            {
+                "tipo": ["A", "A", "B"],
+                "detected": [WEEKS[3], WEEKS[5], pd.NaT],
+                "familia": ["entrega", "produto", None],
+            }
+        )
+    }
+    al = pd.DataFrame({"familia": ["entrega", "entrega", "entrega", "produto"]})
+    t = diagnosis_table(det, al).set_index("tipo")
+    assert t.loc["A", "família compatível"] == "1/2 (50%)"
+    assert t.loc["A", "taxa de base (todos os alertas do Radar)"] == "3/4 (75%)"
+    assert t.loc["B", "taxa de base (todos os alertas do Radar)"] == "1/4 (25%)"

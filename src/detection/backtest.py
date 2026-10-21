@@ -254,8 +254,14 @@ def onset_table(detected: dict[str, pd.DataFrame]) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def diagnosis_table(detected: dict[str, pd.DataFrame]) -> pd.DataFrame:
-    """Família do Radar no alerta de detecção × tipo do incidente (D-026, item 1)."""
+def diagnosis_table(
+    detected: dict[str, pd.DataFrame], radar_alerts: pd.DataFrame | None = None
+) -> pd.DataFrame:
+    """Família do Radar no alerta de detecção × tipo do incidente (D-026, item 1).
+
+    Taxa de base: fração de todos os alertas do Radar no período (casados ou não) com família
+    compatível. Diz quanto acertaria quem chutasse a família pela frequência dos alertas.
+    """
     r = detected.get("Radar")
     if r is None:
         return pd.DataFrame()
@@ -264,17 +270,28 @@ def diagnosis_table(detected: dict[str, pd.DataFrame]) -> pd.DataFrame:
     for kind, expected in (("A", {"entrega"}), ("B", set(FAMILIES) - {"entrega"})):
         sub = d[d["tipo"] == kind]
         ok = sub["familia"].isin(expected)
-        rows.append(
-            {
-                "tipo": kind,
-                "detectados pelo Radar": len(sub),
-                "família compatível": f"{int(ok.sum())}/{len(sub)}",
-                "famílias no alerta": ", ".join(
-                    f"{k}: {v}" for k, v in sub["familia"].value_counts().items()
-                ),
-            }
+        row: dict[str, Any] = {
+            "tipo": kind,
+            "detectados pelo Radar": len(sub),
+            "família compatível": f"{int(ok.sum())}/{len(sub)}"
+            + (f" ({ok.mean():.0%})" if len(sub) else ""),
+        }
+        if radar_alerts is not None:
+            base = radar_alerts["familia"].isin(expected)
+            row["taxa de base (todos os alertas do Radar)"] = f"{int(base.sum())}/{len(base)}" + (
+                f" ({base.mean():.0%})" if len(base) else ""
+            )
+        row["famílias no alerta"] = ", ".join(
+            f"{k}: {v}" for k, v in sub["familia"].value_counts().items()
         )
+        rows.append(row)
     return pd.DataFrame(rows)
+
+
+def family_mix(radar_alerts: pd.DataFrame) -> str:
+    """Distribuição das famílias em todos os alertas do Radar do período."""
+    vc = radar_alerts["familia"].value_counts()
+    return ", ".join(f"{k}: {v}" for k, v in vc.items())
 
 
 def export_alerts(
@@ -400,6 +417,8 @@ def run(period: str) -> Path:
         for m in METHODS:
             curves.append(calibrate(scores[m], inc_all, pweeks)[1].assign(método=m))
     summary, detected = summary_at(scores, thetas, inc_all, pweeks)
+    theta_r = thetas.get("Radar")
+    radar_al = alerts(scores["Radar"], theta_r, pweeks) if theta_r is not None else None
     export_alerts(scores, thetas, pweeks, reports / f"alertas_{period}.csv")
     period_inc = inc_all[(inc_all["start"] >= pweeks.min()) & (inc_all["start"] <= pweeks.max())]
     curve_t = pd.concat(curves, ignore_index=True)
@@ -437,7 +456,15 @@ def run(period: str) -> Path:
         "",
         "## Diagnóstico de causa do Radar",
         "",
-        md_table(diagnosis_table(detected)),
+        md_table(diagnosis_table(detected, radar_al)),
+        "",
+        "Taxa de base: fração de **todos** os alertas do Radar no período, casados ou não, com a "
+        "família compatível. É o acerto de quem chutasse a família pela frequência dos alertas."
+        + (
+            f" Famílias nos alertas do Radar: {family_mix(radar_al)}."
+            if radar_al is not None
+            else ""
+        ),
         "",
         "## Recall em níveis iguais de falsos alarmes",
         "",

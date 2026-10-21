@@ -66,10 +66,12 @@ Semana da primeira detecção de cada método (— = não detectou). Antecedênc
 
 ## Diagnóstico de causa do Radar
 
-| tipo | detectados pelo Radar | família compatível | famílias no alerta |
-|---|---|---|---|
-| A | 16 | 11/16 | entrega: 11, incompleto: 4, produto: 1 |
-| B | 0 | 0/0 |  |
+| tipo | detectados pelo Radar | família compatível | taxa de base (todos os alertas do Radar) | famílias no alerta |
+|---|---|---|---|---|
+| A | 16 | 11/16 (69%) | 40/70 (57%) | entrega: 11, incompleto: 4, produto: 1 |
+| B | 0 | 0/0 | 30/70 (43%) |  |
+
+Taxa de base: fração de **todos** os alertas do Radar no período, casados ou não, com a família compatível. É o acerto de quem chutasse a família pela frequência dos alertas. Famílias nos alertas do Radar: entrega: 40, incompleto: 16, produto: 10, atendimento: 3, outro: 1.
 
 ## Recall em níveis iguais de falsos alarmes
 
