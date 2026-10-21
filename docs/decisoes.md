@@ -1074,3 +1074,28 @@ problema é reportado. Verificações:
 
 O verificador reexecuta as consultas no mesmo banco recortado: um número só é verificado se
 fosse calculável na semana do alerta.
+
+### D-054 · Alertas que o agente investiga: B2 em 2018, critério fixado antes de rodar
+> Decisão do usuário em 2026-10-20, depois de D-053. A lista foi gerada e versionada **antes**
+> de qualquer chamada do agente.
+
+- **Fonte:** alertas do B2 (θ = 2,0) na avaliação de 2018, recalculados por
+  `python -m src.agent.targets` com o mesmo código do backtest. A lista fica em
+  `reports/agente_alvos.csv`.
+- **Critério** (variedade, não os melhores casos):
+  1. incidentes de 2018 em que a família do alerta do Radar não é `entrega`, na primeira
+     detecção do B2 (4 alertas: `esporte_lazer` B, `ferramentas_jardim`, `moveis_decoracao`
+     e BA);
+  2. o primeiro incidente A de 2018 em SP, o maior estado, como caso típico de entrega;
+  3. o último incidente do período (SP, agosto de 2018, nas duas últimas semanas dos dados), que
+     o Radar não detectou;
+  4. o caso `5dceca12` (D-026): o primeiro alerta do B2 em mar–mai/2018 na categoria do vendedor
+     com mais pedidos dele entre as que tiveram alerta (`bebes`, 2018-03-12, um falso alarme no
+     gabarito). O alerta não cita o vendedor; ver se o agente chega a ele é parte do teste;
+  5. os 2 falsos alarmes de maior escore, em segmentos distintos e ainda não escolhidos (CE e
+     `pet_shop`).
+- **Total:** 9 alertas. **Piloto:** 3, um de cada tipo diferente: o típico (SP 2018-02-19), o
+  caso `5dceca12` (`bebes` 2018-03-12) e o falso alarme de maior escore (CE 2018-03-12).
+- **O agente recebe só** segmento, semana, método e escore, com uma frase que explica o B2.
+  Critério e gabarito aparecem apenas no relatório (`reports/agente*.md`), para avaliar o
+  briefing depois.

@@ -1,0 +1,10 @@
+criterio,segment_type,segment_value,week,score,gabarito,piloto,metodo
+1. família do Radar = incompleto (incidente B 2018-01-29),categoria,esporte_lazer,2018-01-08,2.415,incidente B 2018-01-29,não,B2
+1. família do Radar = produto (incidente A 2018-02-26),categoria,ferramentas_jardim,2018-03-12,2.851,incidente A 2018-02-26,não,B2
+1. família do Radar = atendimento (incidente A 2018-03-12),categoria,moveis_decoracao,2018-02-26,2.131,incidente A 2018-03-12,não,B2
+1. família do Radar = incompleto (incidente A 2018-03-19),estado,BA,2018-03-05,3.28,incidente A 2018-03-19,não,B2
+2. incidente típico (A 2018-03-12),estado,SP,2018-02-19,2.742,incidente A 2018-03-12,sim,B2
+3. último incidente do período (A 2018-08-06),estado,SP,2018-08-06,2.417,incidente A 2018-08-06,não,B2
+4. caso 5dceca12 (categoria),categoria,bebes,2018-03-12,2.923,falso alarme,sim,B2
+5. falso alarme de maior escore,estado,CE,2018-03-12,4.006,falso alarme,sim,B2
+5. falso alarme de maior escore,categoria,pet_shop,2018-04-16,3.037,falso alarme,não,B2

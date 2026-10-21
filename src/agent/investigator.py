@@ -31,6 +31,13 @@ RUN_SQL = {
         "required": ["query"],
     },
 }
+METHOD_TEXT = {
+    "Radar": "Alerta do Radar",
+    "B2": (
+        "Alerta do detector (a fração de avaliações com nota ≤ 2 respondidas na semana subiu "
+        "acima da mediana das 26 semanas anteriores)"
+    ),
+}
 FINAL_REQUEST = (
     "Escreva agora o briefing final em JSON com resumo, causa_provavel e afirmacoes. Cada "
     "afirmação precisa de uma query_sql que devolva exatamente o valor citado."
@@ -44,12 +51,14 @@ class Alert:
     week: str
     familia: str | None = None
     escore: float | None = None
+    metodo: str = "Radar"
 
     def text(self) -> str:
         fam = f", família de causa em alta: {self.familia}" if self.familia else ""
         esc = f", escore {self.escore:.1f}" if self.escore is not None else ""
+        source = METHOD_TEXT.get(self.metodo, f"Alerta do detector {self.metodo}")
         return (
-            f"Alerta do Radar: {self.segment_type} = {self.segment_value}, semana {self.week}"
+            f"{source}: {self.segment_type} = {self.segment_value}, semana {self.week}"
             f"{fam}{esc}. Investigue o que está acontecendo e escreva o briefing."
         )
 

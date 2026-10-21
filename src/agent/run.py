@@ -1,9 +1,11 @@
 """Roda o agente investigador nos alertas do Radar e grava `reports/agente.md` e
 `reports/briefings.json` (Fase 8; o JSON alimenta o painel).
 
-Uso: `python -m src.agent.run --top 5` (estimativa) e `--confirm` (OK do usuário, D-013).
-Os alertas vêm de `reports/alertas_avaliacao.csv` (backtest de 2018): os de maior escore do
-Radar, um por segmento. Só depois do lote da Fase 6 (a GPU fica livre).
+Uso: `python -m src.agent.run --pilot` (estimativa) e `--confirm` (OK do usuário, D-013).
+Os alertas vêm de `reports/agente_alvos.csv` (alertas do B2 em 2018, selecionados por
+`src.agent.targets` com critério fixado antes de rodar, D-054). `--pilot` roda só os marcados
+como piloto e grava `agente_piloto.md` / `briefings_piloto.json`. O agente recebe só o alerta
+(segmento, semana, método, escore); critério e gabarito aparecem apenas no relatório.
 
 Cada investigação usa um banco recortado no fim da semana do alerta (D-050), aberto com as
 quatro camadas de somente leitura.
@@ -14,7 +16,7 @@ from __future__ import annotations
 import argparse
 import json
 import tempfile
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
@@ -28,16 +30,27 @@ from src.config import load_config, resolve_path
 from src.data.stats import md_table, pct
 from src.llm.client import LLMClient
 
-ALERTS_FILE = "alertas_avaliacao.csv"
+TARGETS_FILE = "agente_alvos.csv"
 
 
-def pick_alerts(path: Path, top: int) -> list[Alert]:
-    a = pd.read_csv(path)
-    r = a[a["metodo"] == "Radar"].sort_values("score", ascending=False)
-    r = r.drop_duplicates(["segment_type", "segment_value"]).head(top)
+@dataclass(frozen=True)
+class Target:
+    alert: Alert
+    criterio: str
+    gabarito: str
+
+
+def load_targets(path: Path, pilot: bool) -> list[Target]:
+    t = pd.read_csv(path, dtype={"week": str})
+    if pilot:
+        t = t[t["piloto"] == "sim"]
     return [
-        Alert(x.segment_type, x.segment_value, x.week, x.familia, float(x.score))
-        for x in r.itertuples(index=False)
+        Target(
+            Alert(x.segment_type, x.segment_value, x.week, None, float(x.score), x.metodo),
+            x.criterio,
+            x.gabarito,
+        )
+        for x in t.itertuples(index=False)
     ]
 
 
@@ -68,14 +81,16 @@ def to_json(invs: list[Investigation]) -> list[dict[str, Any]]:
     return out
 
 
-def report(invs: list[Investigation]) -> list[str]:
+def report(invs: list[Investigation], targets: list[Target]) -> list[str]:
     rows, claims = [], []
-    for i, inv in enumerate(invs, 1):
+    for i, (inv, t) in enumerate(zip(invs, targets, strict=True), 1):
         a = inv.alert
         rows.append(
             {
                 "#": i,
-                "alerta": f"{a.segment_type}={a.segment_value} {a.week} ({a.familia})",
+                "alerta": f"{a.metodo} {a.segment_type}={a.segment_value} {a.week}",
+                "critério": t.criterio,
+                "gabarito": t.gabarito,
                 "iterações": inv.iterations,
                 "consultas": len(inv.queries),
                 "briefing válido": "sim" if inv.briefing else "não",
@@ -101,6 +116,8 @@ def report(invs: list[Investigation]) -> list[str]:
         "# Agente investigador: briefings verificados",
         "",
         "_Gerado por `python -m src.agent.run`. Não edite à mão._",
+        "",
+        "Critério e gabarito vêm de `reports/agente_alvos.csv` (D-054); o agente não os vê.",
         "",
         f"- Alertas investigados: {len(invs)}; afirmações: {n}; verificadas: {ok}"
         + (f" ({pct(ok / n)})" if n else "")
@@ -133,12 +150,13 @@ def report(invs: list[Investigation]) -> list[str]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--top", type=int, default=5)
+    parser.add_argument("--pilot", action="store_true")
     parser.add_argument("--confirm", action="store_true")
     args = parser.parse_args()
     cfg = load_config()
     reports = Path(resolve_path(cfg["paths"]["reports_dir"]))
-    alerts = pick_alerts(reports / ALERTS_FILE, args.top)
+    targets = load_targets(reports / TARGETS_FILE, args.pilot)
+    alerts = [t.alert for t in targets]
     print(
         f"{len(alerts)} alertas; até {len(alerts) * (MAX_ITERATIONS + 2)} chamadas ao LLM "
         "(iterações + briefing com até 2 tentativas)"
@@ -147,8 +165,10 @@ def main() -> None:
         raise SystemExit("Mostre a estimativa ao usuário e, com o OK, rode com --confirm.")
     client = LLMClient.from_config(cfg)
     source = resolve_path(cfg["paths"]["db_path"])
-    invs = []
-    for a in alerts:
+    suffix = "_piloto" if args.pilot else ""
+    path = reports / f"agente{suffix}.md"
+    invs: list[Investigation] = []
+    for i, a in enumerate(alerts, 1):
         with tempfile.TemporaryDirectory() as tmp:
             snap = build_snapshot(
                 source, Path(tmp) / "corte.db", cutoff_for_week(a.week), classif_db()
@@ -158,11 +178,19 @@ def main() -> None:
                 invs.append(investigate(client, sql, a))
             finally:
                 sql.close()
-    (reports / "briefings.json").write_text(
-        json.dumps(to_json(invs), ensure_ascii=False, indent=2), encoding="utf-8"
-    )
-    path = reports / "agente.md"
-    path.write_text("\n".join(report(invs)), encoding="utf-8", newline="\n")
+        inv = invs[-1]
+        print(
+            f"{i}/{len(alerts)} {a.segment_type}={a.segment_value} {a.week}: "
+            f"{inv.iterations} iterações, {len(inv.checks)} afirmações, {inv.latency_s:.0f} s",
+            flush=True,
+        )
+        # grava a cada alerta: uma falha no meio não perde as investigações já feitas
+        (reports / f"briefings{suffix}.json").write_text(
+            json.dumps(to_json(invs), ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        path.write_text(
+            "\n".join(report(invs, targets[: len(invs)])), encoding="utf-8", newline="\n"
+        )
     print(f"Relatório gravado em {path}")
 
 
